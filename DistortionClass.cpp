@@ -364,7 +364,7 @@ std::vector < std::vector<float> > distortionMap::calculateMapErrors(int face){
 }
 
 void PCAResult::doPCA(const std::vector<elecInfo> &points) {
-
+  std::cout << "Do PCA..." << std::endl;
   TVector3 outputCentroid;
   std::pair<TVector3,TVector3> outputEndPoints;
   float outputLength;
@@ -496,7 +496,10 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
   endPoints = outputEndPoints;
   length = outputLength;
   eVals = outputEigenValues;
+  std::cout << "Size: " << outputEigenVecs.size() << std::endl;
   eVecs = outputEigenVecs;
+  
+  std::cout << "Done with PCA..." << std::endl;
 
 }
 
@@ -506,9 +509,11 @@ void SCECalib::loadTruthMap(bool isFwd)
   
   std::string treeVar = "bkwd";
   std::string recoVar = "reco";
-  if(isFwd)
+  
+  if(isFwd){
     treeVar = "fwd";
     recoVar = "true";
+  }
     
   TTreeReader reader(Form("SpaCEtree_%sDisp", treeVar.c_str() ), fileTruth);
   TTreeReaderValue<Double_t> reco_x(reader, Form("x_%s.data_%sDisp", recoVar.c_str(), treeVar.c_str() ) );
@@ -565,7 +570,7 @@ void SCECalib::loadTruthMap(bool isFwd)
     {
       for(int z = 0; z <= nCalibDivisions_z; z++)
       {
-        //std::cout << x << " " << y << " " << z << " " << trueDeltaX[x][y][z]<< " " << trueDeltaY[x][y][z] << " " << trueDeltaZ[x][y][z] << std::endl;
+        
 	if (trueDeltaX[x][y][z] == -999) {
           if (y == nCalibDivisions_y-1) {
             trueDeltaX[x][y][z] = trueDeltaX[x][nCalibDivisions_y-2][z];
@@ -664,8 +669,9 @@ void SCECalib::loadTruthMap(bool isFwd)
     {
       for(int z = 0; z <= nCalibDivisions_z; z++)
       {
+	 //if(isFwd) std::cout << x << " " << y << " " << z << " " << trueDeltaX[x][y][z]<< " " << trueDeltaY[x][y][z] << " " << trueDeltaZ[x][y][z] << std::endl;
 	 distortionVoxel *vox;
-	 //std::cout << z << " " << y << " " << x << " " << trueDeltaX[x][y][z] << " " << trueDeltaY[x][y][z] << " " << trueDeltaX[x][y][z] << std::endl;
+	
 	 if(isFwd) 
 	   vox = xFwdTruthMap.getVoxel(x, y, z);
 	 else
@@ -815,6 +821,7 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
     
     //Check to see if the 2D face maps are empty
     //If they are, and isCalibrated is set to 0, throw an error
+    
     if(isCalibrated && (xTopMap.size() == 0 || yTopMap.size() == 0 || zTopMap.size() == 0 || xBottomMap.size() == 0 || yBottomMap.size() == 0 || zBottomMap.size() == 0 || xUpstreamMap.size() == 0 || yUpstreamMap.size() == 0 || zUpstreamMap.size() == 0 || xDownstreamMap.size() == 0 || yDownstreamMap.size() == 0 || zDownstreamMap.size() == 0 || xCathodeMap.size() == 0 || yCathodeMap.size() == 0 || zCathodeMap.size() == 0) ){
     
        std::cout << "ERROR! Cannot get calibrated offsets with empty calibration maps" << std::endl;
@@ -909,11 +916,11 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       //Zhist_1s->Fill(s0[2]);
       //Zhist_1e->Fill(e0[2]);
       
-      track.updateEndpoints(s1, e1); // update the endpoints of the track. This enables us to use track methods 
+      track.updateEndpoints(s0, e0); // update the endpoints of the track. This enables us to use track methods 
                         
       
       
-      nTracks++;
+      
       
       if(track.isNotContained(distFromFaces, tpcEdges) ) continue;
       
@@ -921,14 +928,16 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       //Zhist_2e->Fill(e0[2]);
       
       
+      
       if (track.isSomething(distFromFaces, tpcEdges) ) continue;
-      
-      
-       
+     
+                   
       //Zhist_3s->Fill(s0[2]);
       //Zhist_3e->Fill(e0[2]);
     
       if (track.isCathodeExiting(distFromFaces, tpcEdges) && (*track_MCS < 1000.0*minTrackMCS_anode)) continue;
+      
+       
 
       //Zhist_4s->Fill(s0[2]);
       //Zhist_4e->Fill(e0[2]);
@@ -946,7 +955,10 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       double randNum = rand->Uniform(1.0);
       if (randNum > std::max(weightFunc->Eval(s0[2]),weightFunc->Eval(e0[2]))) continue;
       
+      
+      nTracks++;
       ++containedTracks;
+      
 
       //Zhist_7s->Fill(s0[2]);
       //Zhist_7e->Fill(e0[2]);
@@ -955,17 +967,24 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       //if (((s0[0] < (Lx - maxXdist)) && (e0[0] < maxXdist)) || ((e0[0] < (Lx - maxXdist)) && (s0[0] < maxXdist))) {
       if(track.isAnodeExiting(distFromFaces, tpcEdges) ){
         
-	std::vector<double> endPoints;
-	endPoints.push_back(0.0);
-	endPoints.push_back(s0[1]+ ( (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) );
-	endPoints.push_back(s0[2]+ ( (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) );
+	
 	
 	if (s0[0] < e0[0]) {
-          e0[0] += SCEFactor*getTruthOffset(endPoints, axisType::xAxis, true);
+          std::vector<double> endPoints;
+	  endPoints.push_back(0.0);
+	  endPoints.push_back(s0[1]+ ( (isCalibrated ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) ) );
+	  endPoints.push_back(s0[2]+ ( (isCalibrated ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) ) );
+	  e0[0] += SCEFactor*getTruthOffset(endPoints, axisType::xAxis, true);
+	  //std::cout << getTruthOffset(endPoints, axisType::xAxis, true) << std::endl;
 	}
 	
 	else {
-          s0[0] += SCEFactor*getTruthOffset(endPoints, axisType::yAxis, true);
+          std::vector<double> endPoints;
+	  endPoints.push_back(0.0);
+	  endPoints.push_back(e0[1]+ ( (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 4) : getTruthOffset(e0,axisType::yAxis) ) ) );
+	  endPoints.push_back(e0[2]+ ( (isCalibrated ? getCalibOffset(e0,axisType::zAxis, 4) : getTruthOffset(e0,axisType::zAxis) ) ) );	  
+	  s0[0] += SCEFactor*getTruthOffset(endPoints, axisType::xAxis, true);
+	  
 	}
       }
 
@@ -973,84 +992,118 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       //Fixes track endpoints, based on 1D face calib.
       //Change this s.t. you use face calibrations, at each x,y,z point once they are calibrated.  
       if(s0[0] < maxXdist) {
-        s1.push_back( 0.0 );
-        s1.push_back( s0[1] + ( (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) );
-        s1.push_back( s0[2] + ( (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) );
+        //std::cout << getTruthOffset(s0,axisType::yAxis) << std::endl;
+	s1.push_back( 0.0 );
+        s1.push_back( s0[1] + ( isCalibrated ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) );
+        s1.push_back( s0[2] + ( isCalibrated ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) );
       }
       else if (s0[0] > (Lx - maxXdist)) {
         s1.push_back( Lx );
-        s1.push_back( s0[1] + (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis)  );
-        s1.push_back( s0[2] + (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis)  );
+        s1.push_back( s0[1] + (isCalibrated ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) )  );
+        s1.push_back( s0[2] + (isCalibrated ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) )  );
       }
       
       else if (std::min( fabs(s0[1]),fabs(Ly-s0[1]) )  < std::min(fabs(s0[2]),fabs(Lz-s0[2])) ) {
         if (fabs(s0[1]) < fabs(Ly-s0[1])) {
-          s1.push_back( s0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 1) : getTruthOffset(s0,axisType::xAxis) );
+          s1.push_back( s0[0] + (isCalibrated ? getCalibOffset(s0,axisType::xAxis, 1) : getTruthOffset(s0,axisType::xAxis) ) );
     	  s1.push_back( 0.0 );
-    	  s1.push_back( s0[2] + (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 1) : getTruthOffset(s0,axisType::zAxis) );
+    	  s1.push_back( s0[2] + (isCalibrated ? getCalibOffset(s0,axisType::zAxis, 1) : getTruthOffset(s0,axisType::zAxis) ) );
         }
         else {
-          s1.push_back( s0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 0) : getTruthOffset(s0,axisType::xAxis) );
+          
+	  
+	  s1.push_back( s0[0] + (isCalibrated ? getCalibOffset(s0,axisType::xAxis, 0) : getTruthOffset(s0,axisType::xAxis) ) );
     	  s1.push_back( Ly );
-    	  s1.push_back( s0[2] + (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 0) : getTruthOffset(s0,axisType::zAxis) );
+    	  s1.push_back( s0[2] + (isCalibrated ? getCalibOffset(s0,axisType::zAxis, 0) : getTruthOffset(s0,axisType::zAxis) ) );
         }
       }
       
       else {
         if (fabs(s0[2]) < fabs(Lz-s0[2])) {
-          s1.push_back( s0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 2) : getTruthOffset(s0,axisType::xAxis) );
-    	  s1.push_back( s0[1] + (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 2) : getTruthOffset(s0,axisType::yAxis) );
+          s1.push_back( s0[0] + (isCalibrated ? getCalibOffset(s0,axisType::xAxis, 2) : getTruthOffset(s0,axisType::xAxis) ) );
+    	  s1.push_back( s0[1] + (isCalibrated ? getCalibOffset(s0,axisType::yAxis, 2) : getTruthOffset(s0,axisType::yAxis) ) );
     	  s1.push_back( 0.0 );
         }
         else {
-          s1.push_back( s0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 3) : getTruthOffset(s0,axisType::xAxis) );
-    	  s1.push_back( s0[1] + (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 3) : getTruthOffset(s0,axisType::yAxis) );
+          s1.push_back( s0[0] + (isCalibrated ? getCalibOffset(s0,axisType::xAxis, 3) : getTruthOffset(s0,axisType::xAxis) ) );
+    	  s1.push_back( s0[1] + (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 3) : getTruthOffset(s0,axisType::yAxis) ) );
     	  s1.push_back( Lz );
         }
       }
     
       if(e0[0] < maxXdist) {
         e1.push_back( 0.0 );
-        e1.push_back( e0[1] + ( (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) );
-        e1.push_back( e0[2] + ( (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) );
+        e1.push_back( e0[1] + (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 4) : getTruthOffset(e0,axisType::yAxis) ) );
+        e1.push_back( e0[2] + (isCalibrated ? getCalibOffset(e0,axisType::zAxis, 4) : getTruthOffset(e0,axisType::zAxis) ) );
       }
       
       else if (e0[0] > (Lx - maxXdist)) {
         e1.push_back( Lx );
-        e1.push_back( e0[1] + ( (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 4) : getTruthOffset(s0,axisType::yAxis) ) );
-        e1.push_back( e0[2] + ( (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 4) : getTruthOffset(s0,axisType::zAxis) ) );
+        e1.push_back( e0[1] + (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 4) : getTruthOffset(e0,axisType::yAxis) ) );
+        e1.push_back( e0[2] + (isCalibrated ? getCalibOffset(e0,axisType::zAxis, 4) : getTruthOffset(e0,axisType::zAxis) ) );
       }
       
       else if (std::min(fabs(e0[1]),fabs(Ly-e0[1])) < std::min(fabs(e0[2]),fabs(Lz-e0[2]))) {
         if (fabs(e0[1]) < fabs(Ly-e0[1])) {
-          e1.push_back( e0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 1) : getTruthOffset(s0,axisType::xAxis) );
+          e1.push_back( e0[0] + (isCalibrated ? getCalibOffset(e0,axisType::xAxis, 1) : getTruthOffset(e0,axisType::xAxis) ) );
     	  e1.push_back( 0.0 );
-    	  e1.push_back( e0[2] + (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 1) : getTruthOffset(s0,axisType::zAxis) );
+    	  e1.push_back( e0[2] + (isCalibrated ? getCalibOffset(e0,axisType::zAxis, 1) : getTruthOffset(e0,axisType::zAxis) ) );
         }
         else {
-          e1.push_back( e0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 0) : getTruthOffset(s0,axisType::xAxis) );
+          //std::cout << getTruthOffset(s0,axisType::xAxis) << std::endl;
+	  e1.push_back( e0[0] + (isCalibrated ? getCalibOffset(e0,axisType::xAxis, 0) : getTruthOffset(e0,axisType::xAxis) ) );
     	  e1.push_back( Ly );
-    	  e1.push_back( e0[2] + (isCalibrated) ? getCalibOffset(s0,axisType::zAxis, 0) : getTruthOffset(s0,axisType::zAxis) );
+    	  e1.push_back( e0[2] + (isCalibrated ? getCalibOffset(e0,axisType::zAxis, 0) : getTruthOffset(e0,axisType::zAxis) ) );
         }
       }
       
       else {
         if (fabs(e0[2]) < fabs(Lz-e0[2])) {
-          e1.push_back( e0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 2) : getTruthOffset(s0,axisType::xAxis) );
-    	  e1.push_back( e0[1] + (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 2) : getTruthOffset(s0,axisType::yAxis) );
+          e1.push_back( e0[0] + (isCalibrated ? getCalibOffset(e0,axisType::xAxis, 2) : getTruthOffset(e0,axisType::xAxis) ) );
+    	  e1.push_back( e0[1] + (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 2) : getTruthOffset(e0,axisType::yAxis) ) );
     	  e1.push_back( 0.0 );
         }
         else {
-          e1.push_back( e0[0] + (isCalibrated) ? getCalibOffset(s0,axisType::xAxis, 3) : getTruthOffset(s0,axisType::xAxis) );
-    	  e1.push_back( e0[1] + (isCalibrated) ? getCalibOffset(s0,axisType::yAxis, 3) : getTruthOffset(s0,axisType::yAxis) );
+          e1.push_back( e0[0] + (isCalibrated ? getCalibOffset(e0,axisType::xAxis, 3) : getTruthOffset(e0,axisType::xAxis) ) );
+    	  e1.push_back( e0[1] + (isCalibrated ? getCalibOffset(e0,axisType::yAxis, 3) : getTruthOffset(e0,axisType::yAxis) ) );
     	  e1.push_back( Lz );
         }
       }
       
       double trackLength = sqrt(pow(s1[0]-e1[0],2.0)+pow(s1[1]-e1[1],2.0)+pow(s1[2]-e1[2],2.0));
+      //std::cout << s1[0] << " " << s1[1] << " " << s1[2] << " : " << e1[0] << " " << e1[1] << " " << e1[2] << std::endl;
+      //std::cout << "Track L: " << trackLength << std::endl;
+      track.electrons.clear();
       
-      //Double_t theta = ArcCos((y1-y0)/trackLength);
-      //Double_t phi = ArcSin((x0-x1)/(trackLength*Sin(theta)));
+      for(int j = 0; j < *nPoints; j++)
+      {
+        
+	if (((j % 10) != 0) && (j != *nPoints-1)) continue;
+        std::vector<double> xFormedPoints;
+	if (track.isAnodeExiting(distFromFaces, tpcEdges)) {
+	  if (s1[0] < e1[0]) {
+	    xFormedPoints.push_back( doCoordTransformX(pointX[j]+x_offset) + (isCalibrated ? getCalibOffset(s1, axisType::xAxis, 4) : getTruthOffset(s1, axisType::xAxis, true) ) );
+	  }
+	  
+	  else {
+	    xFormedPoints.push_back( doCoordTransformX(pointX[j]+x_offset) + (isCalibrated ? getCalibOffset(e1, axisType::xAxis, 4) : getTruthOffset(e1 ,axisType::xAxis, true) ) );
+	  }
+        
+	}
+        
+	else {
+          xFormedPoints.push_back( doCoordTransformX(pointX[j]+x_offset) );
+        }
+        
+       
+       xFormedPoints.push_back(doCoordTransformY(pointY[j]) );
+       xFormedPoints.push_back(doCoordTransformZ(pointZ[j]) );       
+        
+       electron.updateSMod( xFormedPoints );
+       track.electrons.push_back(electron);
+	
+      }
+      
       double theta = acos( (e1[1]-s1[1])/trackLength );
       double phi = acos( (e1[2]-s1[2])/(trackLength*sin(theta)) );
       if (e1[0] > s1[0]) {
@@ -1064,24 +1117,7 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       track.pdgID = 13;
       track.updateEndpoints(s1, e1);//update the start and endpoints after "gluing" to the faces.
       track.updateAngles(theta, phi);
-      track.electrons.clear();
       
-      
-      
-      for(int j = 0; j < *nPoints; j++)
-      {
-        
-	if (((j % 10) != 0) && (j != *nPoints-1)) continue;
-        std::vector<double> xFormedPoints;
-        
-        xFormedPoints.push_back(doCoordTransformX(pointX[j]+x_offset) );
-        xFormedPoints.push_back(doCoordTransformY(pointY[j]) );
-        xFormedPoints.push_back(doCoordTransformZ(pointZ[j]) );       
-        
-	electron.updateSMod( xFormedPoints );
-        track.electrons.push_back(electron);
-	
-      }
       
       tracks.push_back(track);
     }
@@ -1105,7 +1141,8 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
     Zhist_7e->Write();
 */
     std::cout << "N Tracks: " << nTracks << std::endl;
-    std::cout << "Contained Tracks: " << containedTracks << std::endl;
+    std::cout << "Contained tracks: " << containedTracks << std::endl;
+    std::cout << "Input Track Num: " << inputTrackNum << std::endl;
     return tracks;
 }  
 
@@ -1220,7 +1257,11 @@ double SCECalib::getTruthOffset(std::vector<double> sVec, axisType comp, bool is
   
   offset = vox->getDistortions()[0];
      
-  if ((comp == 0) && (offset < 0.0)) {
+  if (!isFwd && (comp == 0) && (offset < 0.0)) {
+    offset = 0.0;
+  }
+  
+  if (isFwd && (comp == 1) && (offset > 0.0)) {
     offset = 0.0;
   }
   
@@ -1383,9 +1424,9 @@ void SCECalib::Intialize(){
 
   maxCosmicTracks = 100;
 
-  minTrackMCS_anode;
-  minTrackMCS_cathode;
-  minTrackMCS_crossing;
+  minTrackMCS_anode = 3.3;
+  minTrackMCS_cathode = 1.7;
+  minTrackMCS_crossing = 1.4;
 
   nCalibDivisions = 25; // MICROBOONE
 //Int_t nCalibDivisions = 18; // PROTODUNE-SP
@@ -1395,24 +1436,6 @@ void SCECalib::Intialize(){
   nCalibDivisions_x = nCalibDivisions;
   nCalibDivisions_y = TMath::Nint((Ly/Lx)*((double)nCalibDivisions));
   nCalibDivisions_z = TMath::Nint((Lz/Lx)*((double)nCalibDivisions));
-
-  if (doBulk == false) {
-    minTrackMCS_anode = 0.0;
-    minTrackMCS_cathode = 0.0;
-    minTrackMCS_crossing = 0.0;
-  }
-  
-  else if (isMC == true) {
-    minTrackMCS_anode = 3.3;
-    minTrackMCS_cathode = 1.7;
-    minTrackMCS_crossing = 1.4;
-  }
-  
-  else {
-    minTrackMCS_anode = 1.5;
-    minTrackMCS_cathode = 1.1;
-    minTrackMCS_crossing = 0.0;
-  }
 
   randSeed = 1; //set this to 0 to get a random seed
 
@@ -1629,6 +1652,8 @@ std::vector<distortionMap> SCECalib::doCosmicCosmicCalib(const std::vector<calib
         dTheta = piVal - dTheta;
       }
       if(dTheta < relAngleCut*(piVal/180.0)) continue;
+      
+      //std::cout << i << " " << calibTrackA.x0 << " " << calibTrackA.y0 << " " << calibTrackA.z0 << " " << calibTrackA.theta << " " << calibTrackA.phi << std::endl;
       
       POAparams = findClosestPOA(calibTrackA,calibTrackB);
       distVal = POAparams.at(0);
@@ -2936,15 +2961,33 @@ int SCECalib::calculate2DMaps(std::vector<distortionMap> faceCalibDistortions){
 
 }
 
-int main(){
+int main(int argc, char *argv[]){
    
-   calibSteps runType = calibSteps::fullCalib;
+   calibSteps runType; 
+   if(argc == 1)   
+    runType = calibSteps::fullCalib;
+   
+   else if (argc == 2){
+    int run = atoi(argv[1]);
+    if(run < 0 || run > 3){
+      std::cerr << "FATAL: Calibration modes can only be between 0 (face only) and 3 (fullCalib). You entered " << run << std::endl;
+      return -1;  
+    
+    }
+    runType = static_cast<calibSteps>(run);
+   }
+   
+   else{
+     std::cerr << "FATAL: Unrecongnized arguments. Aborting." << std::endl;
+      return -1;
+   
+   } 
    bool faceCalibrated = false;
    
    SCECalib *calibrator = new SCECalib();   
          
    std::vector<trackInfo> laserTracks  = calibrator->getLaserTrackSet();
-   std::vector<trackInfo> cosmicTracks = calibrator->getCosmicTrackSet();
+   std::vector<trackInfo> cosmicTracks = calibrator->getCosmicTrackSet(faceCalibrated);
    
    std::vector<calibTrackInfo> cosmicCalibTracks = calibrator->makeCalibTracks(cosmicTracks);
    
@@ -2952,7 +2995,8 @@ int main(){
   
   switch (runType)  {
    case(bulkOnly) : {
-                                      
+    std::cout << "Running Bulk Only Calibration." << std::endl;                                  
+    
     std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
     
   
@@ -2969,6 +3013,7 @@ int main(){
    }
    
    case(faceOnly) : {
+     std::cout << "Running Face Only Calibration." << std::endl;
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
      calibrator->calculate2DMaps(faceCalibDistortions);
      faceCalibrated = true;

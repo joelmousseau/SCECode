@@ -51,7 +51,7 @@ const Char_t *inputFileLaser = "data/laserDataSCE_NEW.root";
 //const Char_t *inputFileCosmic = "data/oldMCsample_50000events.root";
 //const Char_t *inputFileCosmic = "data/newMCsample_2Mevents.root";
 //const Char_t *inputFileCosmic = "data/MC_Cosmics.root";
-const Char_t *inputFileCosmic = "data/MC_Cosmics_NoSCE.root";
+const Char_t *inputFileCosmic = "/uboone/data/users/joelam/MCExtForSCE.root";
 //const Char_t *inputFileCosmic = "data/Data_Run1_EXTBNB.root";
 //const Char_t *inputFileCosmic = "data/first_set_of_EXTBNB_production.root";
 //const Char_t *inputFileCosmic = "data/cosmicDataSCE_ProtoDUNESP.root";
@@ -68,7 +68,7 @@ const Double_t Lz = 10.0;
 
 const Bool_t isMC = true;
 const Bool_t doBulk = true;
-const Bool_t isSCEon = false;
+const Bool_t isSCEon = true;
 
 const Double_t relAngleCut = 20.0;
 const Double_t maxXdist = 0.05;
@@ -81,7 +81,7 @@ Int_t maxInputTrackNum = 1150000;
 
 //const Int_t maxCosmicTracks = -1;
 //const Int_t maxCosmicTracks = 10000000;
-const Int_t maxCosmicTracks = 100000;
+const Int_t maxCosmicTracks = 100;
 //const Int_t maxCosmicTracks = 30000;
 //const Int_t maxCosmicTracks = 10000;
 
@@ -264,7 +264,7 @@ Int_t main(Int_t argc, Char_t** argv)
   ////doCalibration(laserTracks,cosmicTracks,0.05,3,1,1);
   ////doCalibration(laserTracks,cosmicTracks,0.02,3,1,1);
   //////doCalibration(laserTracks,cosmicTracks,0.01,3,0,2);
-  //doCalibration(laserTracks,cosmicTracks,0.01,3,1,1); // Nominal Configuration
+  doCalibration(laserTracks,cosmicTracks,0.01,3,1,1); // Nominal Configuration
   ////doCalibration(laserTracks,cosmicTracks,0.01,1,1,1); // Nominal Configuration #2
   
   timer.Stop();
@@ -724,6 +724,7 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
     TTreeReaderArray<TVector3> track_points(readerTracks, "track");
 
     Int_t nTracks = 0;
+    
     while (readerLasers.Next())
     {
       readerTracks.Next();
@@ -852,10 +853,11 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
       weightFunc = new TF1("weightFunc","(2.0/75.0)*(x-5.0)^2 + (1.0/3.0)",0.0,10.0);
     }
     
-    TRandom3 *rand = new TRandom3(0);
+    TRandom3 *rand = new TRandom3(1);
 
     Int_t inputTrackNum = -1;
     Int_t nTracks = 0;
+    int containedTracks = 0;
     while (reader.Next())
     {
       inputTrackNum++;
@@ -895,17 +897,24 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
       Zhist_1s->Fill(zS);
       Zhist_1e->Fill(zE);
       
+      
       if (((xS < maxXdist) && (xE < maxXdist)) || ((xS > (Lx - maxXdist)) && (xE > (Lx - maxXdist))) || ((xS < maxXdist) && (yS < maxYdist)) || ((xS < maxXdist) && (yS > (Ly - maxYdist))) || ((xS < maxXdist) && (zS < maxZdist)) || ((xS < maxXdist) && (zS > (Lz -maxZdist))) || ((xE < maxXdist) && (yE < maxYdist)) || ((xE < maxXdist) && (yE > (Ly - maxYdist))) || ((xE < maxXdist) && (zE < maxZdist)) || ((xE < maxXdist) && (zE > (Lz -maxZdist))) || ((yS < maxYdist) && (zS < maxZdist)) || ((yS > (Ly - maxYdist)) && (zS < maxZdist)) || ((yS < maxYdist) && (zS > (Lz - maxZdist))) || ((yS > (Ly - maxYdist)) && (zS > (Lz - maxZdist))) || ((yE < maxYdist) && (zE < maxZdist)) || ((yE > (Ly - maxYdist)) && (zE < maxZdist)) || ((yE < maxYdist) && (zE > (Lz - maxZdist))) || ((yE > (Ly - maxYdist)) && (zE > (Lz - maxZdist)))) continue;
+      
+      
 
       Zhist_2s->Fill(zS);
       Zhist_2e->Fill(zE);
       
       if (((xS > maxXdist) && (xS < (Lx - maxXdist)) && (yS > maxYdist) && (yS < (Ly - maxYdist)) && (zS > maxZdist) && (zS < (Lz - maxZdist))) || ((xE > maxXdist) && (xE < (Lx - maxXdist)) && (yE > maxYdist) && (yE < (Ly - maxYdist)) && (zE > maxZdist) && (zE < (Lz - maxZdist)))) continue;
+      
+      
 
       Zhist_3s->Fill(zS);
       Zhist_3e->Fill(zE);
     
       if ((((xS > (Lx - maxXdist)) && (xE > maxXdist)) || ((xE > (Lx - maxXdist)) && (xS > maxXdist))) && (*track_MCS < 1000.0*minTrackMCS_anode)) continue;
+      
+      
 
       Zhist_4s->Fill(zS);
       Zhist_4e->Fill(zE);
@@ -927,6 +936,9 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
       Zhist_7e->Fill(zE);
 
       nTracks++;
+      ++containedTracks;
+      
+      
 
       double SCEfactor = 1.0;
       if (isSCEon == false) {
@@ -936,17 +948,20 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
       // Correct track end point for cathode-piercing track (end furthest from cathode)
       if (((xS < (Lx - maxXdist)) && (xE < maxXdist)) || ((xE < (Lx - maxXdist)) && (xS < maxXdist))) {
         if (xS < xE) {
-          xE += SCEfactor*getTruthFwdOffset(0.0,yS+getTruthOffset(xS,yS,zS,2),zS+getTruthOffset(xS,yS,zS,3),1);
+          //std::cout << getTruthFwdOffset(0.0,yS+getTruthOffset(xS,yS,zS,2),zS+getTruthOffset(xS,yS,zS,3),1) << std::endl;
+	  xE += SCEfactor*getTruthFwdOffset(0.0,yS+getTruthOffset(xS,yS,zS,2),zS+getTruthOffset(xS,yS,zS,3),1);
 	}
 	else {
           xS += SCEfactor*getTruthFwdOffset(0.0,yE+getTruthOffset(xE,yE,zE,2),zE+getTruthOffset(xE,yE,zE,3),1);
+	  std::cout << getTruthFwdOffset(0.0,yE+getTruthOffset(xE,yE,zE,2),zE+getTruthOffset(xE,yE,zE,3),1) << std::endl;
 	}
       }
       
       if(xS < maxXdist) {
-        x0 = 0.0;
-        y0 = yS + SCEfactor*getTruthOffset(xS,yS,zS,2)*1.1; // TEMP FACTOR
-        z0 = zS + SCEfactor*getTruthOffset(xS,yS,zS,3)*1.1; // TEMP FACTOR
+        //std::cout << getTruthOffset(xS,yS,zS,2) << std::endl;
+	x0 = 0.0;
+        y0 = yS + SCEfactor*getTruthOffset(xS,yS,zS,2); // TEMP FACTOR
+        z0 = zS + SCEfactor*getTruthOffset(xS,yS,zS,3); // TEMP FACTOR
       }
       else if (xS > (Lx - maxXdist)) {
         x0 = Lx;
@@ -960,7 +975,8 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
     	  z0 = zS + SCEfactor*getTruthOffset(xS,yS,zS,3);
         }
         else {
-          x0 = xS + SCEfactor*getTruthOffset(xS,yS,zS,1);
+          
+	  x0 = xS + SCEfactor*getTruthOffset(xS,yS,zS,1);
     	  y0 = Ly;
     	  z0 = zS + SCEfactor*getTruthOffset(xS,yS,zS,3);
         }
@@ -980,8 +996,8 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
     
       if(xE < maxXdist) {
         x1 = 0.0;
-        y1 = yE + SCEfactor*getTruthOffset(xE,yE,zE,2)*1.1; // TEMP FACTOR
-        z1 = zE + SCEfactor*getTruthOffset(xE,yE,zE,3)*1.1; // TEMP FACTOR
+        y1 = yE + SCEfactor*getTruthOffset(xE,yE,zE,2); // TEMP FACTOR
+        z1 = zE + SCEfactor*getTruthOffset(xE,yE,zE,3); // TEMP FACTOR
       }
       else if (xE > (Lx - maxXdist)) {
         x1 = Lx;
@@ -995,7 +1011,8 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
     	  z1 = zE + SCEfactor*getTruthOffset(xE,yE,zE,3);
         }
         else {
-          x1 = xE + SCEfactor*getTruthOffset(xE,yE,zE,1);
+          //std::cout << getTruthOffset(xE,yE,zE,1) << std::endl;
+	  x1 = xE + SCEfactor*getTruthOffset(xE,yE,zE,1);
     	  y1 = Ly;
     	  z1 = zE + SCEfactor*getTruthOffset(xE,yE,zE,3);
         }
@@ -1014,6 +1031,8 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
       }
     
       Double_t trackLength = sqrt(pow(x0-x1,2.0)+pow(y0-y1,2.0)+pow(z0-z1,2.0));
+      //std::cout << x0 << " " << y0 << " " << z0 << " : " << x1 << " " << y1 << " " << z1 << std::endl;
+      //std::cout << "Track L: " << trackLength << std::endl;
       
       //Double_t theta = ArcCos((y1-y0)/trackLength);
       //Double_t phi = ArcSin((x0-x1)/(trackLength*Sin(theta)));
@@ -1088,6 +1107,10 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
     Zhist_5e->Write();
     Zhist_6e->Write();
     Zhist_7e->Write();
+    
+    std::cout << "N Tracks: " << nTracks << std::endl;
+    std::cout << "Contained tracks: " << containedTracks << std::endl;
+    std::cout << "Input Track Num: " << inputTrackNum << std::endl;
 
     return tracks;
   }
@@ -1727,6 +1750,8 @@ void doCosmicCosmicCalib(const vector<calibTrackInfo> &cosmicCalibTracks, Double
       }
       if(dTheta < relAngleCut*(piVal/180.0)) continue;
       
+      //std::cout << i << " " << calibTrackA.track.x0 << " " << calibTrackA.track.y0 << " " << calibTrackA.track.z0 << " " << calibTrackA.track.theta << " " << calibTrackA.track.phi << std::endl;
+      
       POAparams = findClosestPOA(calibTrackA,calibTrackB);
       distVal = POAparams.at(0);
 
@@ -1738,6 +1763,7 @@ void doCosmicCosmicCalib(const vector<calibTrackInfo> &cosmicCalibTracks, Double
 
       if(distValDistorted > 3.0*distVal+0.005) continue;
       //if(distValDistorted > 0.1) continue;
+      std::cout << "Track pair: " << i << ", " << j << std::endl;
       
       distWeight = exp(-1.0*(distVal/distScale));
       
@@ -2517,6 +2543,9 @@ void loadTruthMap()
       }
     }
   }
+  
+
+  
 
   return;
 }
@@ -2698,6 +2727,7 @@ void loadTruthFwdMap()
       }
     }
   }
+ 
 
   return;
 }
