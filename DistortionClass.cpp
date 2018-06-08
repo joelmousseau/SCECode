@@ -188,7 +188,7 @@ std::vector< std::vector < std::vector<float> > > distortionMap::calculateMap(){
 int distortionMap::FaceToVoxel(int face) const{
    //TOP
    if(face == 0)
-     return nYVoxels;
+     return (nYVoxels-1);
    //BOTTOM
    else if(face == 1)
      return 0; 
@@ -197,7 +197,7 @@ int distortionMap::FaceToVoxel(int face) const{
      return 0;   
    //DOWNSTREAM
    else if(face == 3)
-    return nZVoxels;
+    return (nZVoxels-1);
    //CATHODE IS AT 0
    else if(face == 4)  
     return 0;
@@ -364,10 +364,8 @@ std::vector < std::vector<float> > distortionMap::calculateMapErrors(int face){
 }
 
 void PCAResult::doPCA(const std::vector<elecInfo> &points) {
-  std::cout << "Do PCA..." << std::endl;
   
   TVector3 outputCentroid;
-  std::cout << outputCentroid[0] << " " << outputCentroid[1] << " " << outputCentroid[2] << std::endl;
   std::pair<TVector3,TVector3> outputEndPoints;
   float outputLength;
   TVector3 outputEigenValues;
@@ -505,7 +503,7 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
   std::cout << "Size: " << outputEigenVecs.size() << std::endl;
   eVecs = outputEigenVecs;
   */
-  std::cout << startX << std::endl;
+
   if (outputEndPoints.first(0) > outputEndPoints.second(0)) {
     startX =  endPoint1(0);
     startY =  endPoint1(1);
@@ -513,7 +511,6 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
   }
   
   else {
-    std::cout << endPoint2(0) << std::endl;
     startX =  endPoint2(0);
     startY =  endPoint2(1);
     startZ =  endPoint2(2);
@@ -529,7 +526,6 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
       unitZ *= -1.0;
   }
   
-  std::cout << "Done with PCA..." << std::endl;
 
 }
 
@@ -1170,7 +1166,6 @@ std::vector<trackInfo> SCECalib::getCosmicTrackSet(bool isCalibrated = false){
       tracks.push_back(track);
     }
 
-    outputFile->cd();
     /*
     Zhist_1s->Write();
     Zhist_2s->Write();
@@ -1444,9 +1439,7 @@ double SCECalib::getCalibOffset(std::vector<double> sVec, axisType comp, int fac
 void SCECalib::Intialize(){
   inputFileLaser = "data/laserDataSCE_NEW.root";
 
-  inputFileCosmic = "/uboone/data/users/joelam/MCExtForSCE.root";
-
-  outputFile = new TFile("output.root","RECREATE");
+  inputFileCosmic = "/uboone/data/users/joelam/MCExtForSCE.root";  
 
   Lx = 2.5;
   Ly = 2.5;
@@ -1656,29 +1649,7 @@ std::vector<distortionMap> SCECalib::doCosmicCosmicCalib(const std::vector<calib
   
   double rawDeltaX = 0.0;
   double rawDeltaY = 0.0;
-  double rawDeltaZ = 0.0;
-  
-  TTree *T_crossings = new TTree("SpaCEtree_crossings","SpaCEtree_crossings");
-  T_crossings->Branch("trackNum1",&trackNum1,"data_crossings/I");
-  T_crossings->Branch("trackNum2",&trackNum2,"data_crossings/I");  
-  T_crossings->Branch("crossX",&xVal,"data_crossings/D");
-  T_crossings->Branch("crossY",&yVal,"data_crossings/D");
-  T_crossings->Branch("crossZ",&zVal,"data_crossings/D");
-  T_crossings->Branch("crossDist",&distVal,"data_crossings/D");
-  T_crossings->Branch("crossDistX",&crossDistX,"data_crossings/D");
-  T_crossings->Branch("crossDistY",&crossDistY,"data_crossings/D");
-  T_crossings->Branch("crossDistZ",&crossDistZ,"data_crossings/D");
-  T_crossings->Branch("crossX_mod",&xValDistorted,"data_crossings/D");
-  T_crossings->Branch("crossY_mod",&yValDistorted,"data_crossings/D");
-  T_crossings->Branch("crossZ_mod",&zValDistorted,"data_crossings/D");
-  T_crossings->Branch("crossDist_mod",&distValDistorted,"data_crossings/D");
-  T_crossings->Branch("crossDistX_mod",&crossDistX_mod,"data_crossings/D");
-  T_crossings->Branch("crossDistY_mod",&crossDistY_mod,"data_crossings/D");
-  T_crossings->Branch("crossDistZ_mod",&crossDistZ_mod,"data_crossings/D");
-  T_crossings->Branch("distWeight",&distWeight,"data_crossings/D");
-  T_crossings->Branch("crossType",&crossType,"data_crossings/I");
-  T_crossings->SetDirectory(outputFile);
-    
+  double rawDeltaZ = 0.0;      
 
   for(int i = 0; i < numCosmicTracks; i++)
   {
@@ -1736,7 +1707,6 @@ std::vector<distortionMap> SCECalib::doCosmicCosmicCalib(const std::vector<calib
 
       trackNum1 = i;
       trackNum2 = j;
-      T_crossings->Fill();
 
       xCalibLowIndex  = TMath::Floor((xValDistorted/Lx)*nCalibDivisions_x);
       xCalibHighIndex = TMath::Ceil((xValDistorted/Lx)*nCalibDivisions_x);
@@ -2531,7 +2501,7 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
     
     PCAResult results;
     results.doPCA(calibPoints);
-    std::cout << "PCA Done." << std::endl;
+    //std::cout << "PCA Done." << std::endl;
 
     double startX = (results.getStartPoints() ).at(0);
     double startY = (results.getStartPoints() ).at(1);
@@ -3027,37 +2997,66 @@ int main(int argc, char *argv[]){
    std::vector<calibTrackInfo> cosmicCalibTracks = calibrator->makeCalibTracks(cosmicTracks);
    
    std::cout << "Number of Tracks: " << cosmicCalibTracks.size() << std::endl;
-  
+   
+   //Set up output tree
+   TFile *outputFile = new TFile("output.root","RECREATE");
+   /*TTree *T_calib = new TTree("SpaCEtree_calib","SpaCEtree_calib");
+   T_calib->Branch("x_true",&x_true,"data_calib/D");
+   T_calib->Branch("y_true",&y_true,"data_calib/D");
+   T_calib->Branch("z_true",&z_true,"data_calib/D");
+   T_calib->Branch("x_reco",&x_reco,"data_calib/D");
+   T_calib->Branch("y_reco",&y_reco,"data_calib/D");
+   T_calib->Branch("z_reco",&z_reco,"data_calib/D");
+   T_calib->Branch("Dx",&Dx,"data_calib/D");
+   T_calib->Branch("Dy",&Dy,"data_calib/D");
+   T_calib->Branch("Dz",&Dz,"data_calib/D");
+   T_calib->Branch("DxErr",&DxErr,"data_calib/D");
+   T_calib->Branch("DyErr",&DyErr,"data_calib/D");
+   T_calib->Branch("DzErr",&DzErr,"data_calib/D");
+   
+   T_calib->Branch("elecFate",&elecFate,"data_calib/I");
+   
+   T_calib->SetDirectory(outputFile);*/
+   
+   std::vector< std::vector < std::vector<float> > > xMap;     
+   std::vector< std::vector < std::vector<float> > > xMapErrs; 
+
+   std::vector< std::vector < std::vector<float> > > yMap;     
+   std::vector< std::vector < std::vector<float> > > yMapErrs; 
+
+   std::vector< std::vector < std::vector<float> > > zMap;     
+   std::vector< std::vector < std::vector<float> > > zMapErrs;
+   
+
   switch (runType)  {
    case(bulkOnly) : {
     std::cout << "Running Bulk Only Calibration." << std::endl;                                  
     
     std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
-    
+      
+    xMap     =  calibDistortions[0].calculateMap();
+    xMapErrs =  calibDistortions[0].calculateMapErrors();
   
-    std::vector< std::vector < std::vector<float> > > xMap     =  calibDistortions[0].calculateMap();
-    std::vector< std::vector < std::vector<float> > > xMapErrs =  calibDistortions[0].calculateMapErrors();
+    yMap     =  calibDistortions[1].calculateMap();
+    yMapErrs =  calibDistortions[1].calculateMapErrors();
   
-    std::vector< std::vector < std::vector<float> > > yMap     =  calibDistortions[1].calculateMap();
-    std::vector< std::vector < std::vector<float> > > yMapErrs =  calibDistortions[1].calculateMapErrors();
-  
-    std::vector< std::vector < std::vector<float> > > zMap     =  calibDistortions[2].calculateMap();
-    std::vector< std::vector < std::vector<float> > > zMapErrs =  calibDistortions[2].calculateMapErrors();
-  
+    zMap     =  calibDistortions[2].calculateMap();
+    zMapErrs =  calibDistortions[2].calculateMapErrors();
+          
     return 0;
    }
    
    case(faceOnly) : {
      std::cout << "Running Face Only Calibration." << std::endl;
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
-     //std::cout << "Calculating 2D Maps." << std::endl;
-     //calibrator->calculate2DMaps(faceCalibDistortions);
+     calibrator->calculate2DMaps(faceCalibDistortions);
      faceCalibrated = true;
      return 0;
    
    }
    
    case(bulkAndFace) : {
+     std::cout << "Running Bulk then Face Calibration." << std::endl;
      std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
      calibrator->loadTruthMap(calibDistortions);     
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
@@ -3065,12 +3064,11 @@ int main(int argc, char *argv[]){
      faceCalibrated = true;
      
      return 0;
-     
-     
-   
+             
    }
    
    case(fullCalib) : {
+     std::cout << "Running Full Chain Calibration." << std::endl;
      std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
      calibrator->loadTruthMap(calibDistortions);     
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
@@ -3079,8 +3077,7 @@ int main(int argc, char *argv[]){
      calibrator->getCosmicTrackSet(faceCalibrated);              
      std::vector<distortionMap> finalDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
      return 0;
-     
-   
+        
    }
    
    default : return 1;

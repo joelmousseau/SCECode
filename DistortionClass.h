@@ -325,7 +325,7 @@ class SCECalib{
    public:
      SCECalib() {Intialize(); loadTruthMap(); loadTruthMap(true);}
      
-     ~SCECalib(){outputFile->Write(); outputFile->Close();}
+     ~SCECalib(){}
                
      std::vector<trackInfo> getLaserTrackSet();
      
@@ -357,14 +357,16 @@ class SCECalib{
      
      void loadTruthMap(std::vector<distortionMap>& inputMaps);
      
+     double getCalibOffset(std::vector<double> sVec, axisType comp, int face);
+     
+     double getTruthOffset(std::vector<double> sVec, axisType comp, bool isFwd = false);
+     
 
    private:
      void Intialize();
      
-     double getTruthOffset(std::vector<double> sVec, axisType comp, bool isFwd = false);
      
-     double getCalibOffset(std::vector<double> sVec, axisType comp, int face);
-     
+               
      void loadTruthMap(bool isFwd = false);          
      
      int cosmicTruthMode;          
@@ -375,8 +377,6 @@ class SCECalib{
      
      
      calibSteps stepsToRun;
-
-     TFile *outputFile;
 
      double Lx;
      double Ly;
