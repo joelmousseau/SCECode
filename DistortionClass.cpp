@@ -365,13 +365,15 @@ std::vector < std::vector<float> > distortionMap::calculateMapErrors(int face){
 
 void PCAResult::doPCA(const std::vector<elecInfo> &points) {
   std::cout << "Do PCA..." << std::endl;
+  
   TVector3 outputCentroid;
+  std::cout << outputCentroid[0] << " " << outputCentroid[1] << " " << outputCentroid[2] << std::endl;
   std::pair<TVector3,TVector3> outputEndPoints;
   float outputLength;
   TVector3 outputEigenValues;
   std::vector<TVector3> outputEigenVecs;
-
-  float meanPosition[3] = {0., 0., 0.};
+  
+  double meanPosition[3] = {0., 0., 0.};
   unsigned int nThreeDHits = 0;
 
   for (unsigned int i = 0; i < points.size(); i++) {
@@ -390,7 +392,9 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
   meanPosition[0] /= nThreeDHitsAsFloat;
   meanPosition[1] /= nThreeDHitsAsFloat;
   meanPosition[2] /= nThreeDHitsAsFloat;
-  outputCentroid = TVector3(meanPosition[0], meanPosition[1], meanPosition[2]);
+  outputCentroid.SetX(meanPosition[0]);
+  outputCentroid.SetY(meanPosition[1]);
+  outputCentroid.SetZ(meanPosition[2]);
 
   // Define elements of our covariance matrix
   float xi2 = 0.0;
@@ -489,17 +493,61 @@ void PCAResult::doPCA(const std::vector<elecInfo> &points) {
 
   outputEndPoints.first = TVector3(endPoint1(0),endPoint1(1),endPoint1(2));
   outputEndPoints.second = TVector3(endPoint2(0),endPoint2(1),endPoint2(2));
+  
 
   outputLength = sqrt(pow(endPoint2(0)-endPoint1(0),2.0)+pow(endPoint2(1)-endPoint1(1),2.0)+pow(endPoint2(2)-endPoint1(2),2.0));
-
+  /*
+  std::cout << "Point: " << outputCentroid[0] << " " << outputCentroid[1] << " " << outputCentroid[2] << std::endl;
   centroid = outputCentroid;
   endPoints = outputEndPoints;
   length = outputLength;
   eVals = outputEigenValues;
   std::cout << "Size: " << outputEigenVecs.size() << std::endl;
   eVecs = outputEigenVecs;
+  */
+  std::cout << startX << std::endl;
+  if (outputEndPoints.first(0) > outputEndPoints.second(0)) {
+    startX =  endPoint1(0);
+    startY =  endPoint1(1);
+    startZ =  endPoint1(2);
+  }
+  
+  else {
+    std::cout << endPoint2(0) << std::endl;
+    startX =  endPoint2(0);
+    startY =  endPoint2(1);
+    startZ =  endPoint2(2);
+  }
+
+  unitX = outputEigenVecs[0](0);
+  unitY = outputEigenVecs[0](1);
+  unitZ = outputEigenVecs[0](2);
+  
+  if (unitX > 0.0) {
+      unitX *= -1.0;
+      unitY *= -1.0;
+      unitZ *= -1.0;
+  }
   
   std::cout << "Done with PCA..." << std::endl;
+
+}
+
+std::vector<double> PCAResult::getStartPoints(){
+  std::vector<double> return_vec;
+  return_vec.push_back(startX);
+  return_vec.push_back(startY);
+  return_vec.push_back(startZ);
+  return return_vec;   
+
+}
+
+std::vector<double> PCAResult::getUnits(){
+  std::vector<double> return_vec;
+  return_vec.push_back(unitX);
+  return_vec.push_back(unitY);
+  return_vec.push_back(unitZ);
+  return return_vec;   
 
 }
 
@@ -2481,32 +2529,19 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
     }
     if (numBadPoints > 5) continue;
     
-    PCAResult *results;
-    results->doPCA(calibPoints);
+    PCAResult results;
+    results.doPCA(calibPoints);
+    std::cout << "PCA Done." << std::endl;
 
-    double startX;
-    double startY;
-    double startZ;
-    if (results->endPoints.first(0) > results->endPoints.second(0)) {
-      startX = results->endPoints.first(0);
-      startY = results->endPoints.first(1);
-      startZ = results->endPoints.first(2);
-    }
-    else {
-      startX = results->endPoints.second(0);
-      startY = results->endPoints.second(1);
-      startZ = results->endPoints.second(2);
-    }
+    double startX = (results.getStartPoints() ).at(0);
+    double startY = (results.getStartPoints() ).at(1);
+    double startZ = (results.getStartPoints() ).at(2);
+    
 
-    double unitX = results->eVecs[0](0);
-    double unitY = results->eVecs[0](1);
-    double unitZ = results->eVecs[0](2);
-    if (unitX > 0.0) {
-      unitX *= -1.0;
-      unitY *= -1.0;
-      unitZ *= -1.0;
-    }
-
+    double unitX = (results.getUnits() ).at(0);
+    double unitY = (results.getUnits() ).at(1);
+    double unitZ = (results.getUnits() ).at(2);
+    
     int whichFace = -1;
     
     double t_Top = (Ly-startY)/unitY;
@@ -3015,7 +3050,8 @@ int main(int argc, char *argv[]){
    case(faceOnly) : {
      std::cout << "Running Face Only Calibration." << std::endl;
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
-     calibrator->calculate2DMaps(faceCalibDistortions);
+     //std::cout << "Calculating 2D Maps." << std::endl;
+     //calibrator->calculate2DMaps(faceCalibDistortions);
      faceCalibrated = true;
      return 0;
    

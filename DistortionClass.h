@@ -291,17 +291,30 @@ class distortionMap
 
 class PCAResult {
    public:
-      PCAResult() {} ;
+      PCAResult() : startX(0.0), startY(0.0), startZ(0.0), unitX(0.0), unitY(0.0), unitZ(0.0) {} ;
      
      ~PCAResult() {} ;
-     
-     TVector3 centroid;
+     /*
+     TVector3 Centroid;
      std::pair<TVector3,TVector3> endPoints;
      float length;
      TVector3 eVals;
      std::vector<TVector3> eVecs;
-     
+     */
      void doPCA(const std::vector<elecInfo> &points);
+     
+     std::vector<double> getStartPoints();
+     
+     std::vector<double> getUnits(); 
+   
+   private:
+      double startX;
+      double startY;
+      double startZ;
+      
+      double unitX;
+      double unitY;
+      double unitZ; 
 
 
 
