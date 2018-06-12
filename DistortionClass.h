@@ -294,13 +294,7 @@ class PCAResult {
       PCAResult() : startX(0.0), startY(0.0), startZ(0.0), unitX(0.0), unitY(0.0), unitZ(0.0) {} ;
      
      ~PCAResult() {} ;
-     /*
-     TVector3 Centroid;
-     std::pair<TVector3,TVector3> endPoints;
-     float length;
-     TVector3 eVals;
-     std::vector<TVector3> eVecs;
-     */
+
      void doPCA(const std::vector<elecInfo> &points);
      
      std::vector<double> getStartPoints();
@@ -340,9 +334,7 @@ class SCECalib{
      std::vector<distortionMap>  doCosmicCosmicCalib(const std::vector<calibTrackInfo> &cosmicCalibTracks);
      
      std::vector<calibTrackInfo> makeCalibTracks(const std::vector<trackInfo> &tracks);
-     
-     //int doCalibration(const std::vector<trackInfo> &laserTracks, const std::vector<trackInfo> &cosmicTracks);
-     
+          
      std::vector<double> findClosestPOA(const calibTrackInfo &calibTrackA, const calibTrackInfo &calibTrackB) const;
      
      std::vector<double> findDistortedClosestPOA(const calibTrackInfo &calibTrackA, const calibTrackInfo &calibTrackB) const;
@@ -350,22 +342,28 @@ class SCECalib{
      std::vector<double> getParabolaParameters(const std::vector<elecInfo> &parabola_points_track) const;
      
      std::vector<distortionMap> doCalibFaces(const std::vector<calibTrackInfo> &cosmicTracks, int minTrackPoints, int numTrackSegPoints);
-     
-     int setStepsToRun(calibSteps steps) {stepsToRun = steps; return 1;}
-     
+          
      int calculate2DMaps(std::vector<distortionMap> faceCalibDistortions);
+     
+     int calculate2DMapErrs(std::vector<distortionMap> faceCalibDistortions);
      
      void loadTruthMap(std::vector<distortionMap>& inputMaps);
      
-     double getCalibOffset(std::vector<double> sVec, axisType comp, int face);
+     std::vector< std::vector< std::vector<float> > > get2DMapErrs(axisType comp);
      
-     double getTruthOffset(std::vector<double> sVec, axisType comp, bool isFwd = false);
+     std::vector< std::vector< std::vector<float> > > get2DMaps(axisType comp);
+     
+     std::vector<int> getCalibDivisions();
+     
+     std::vector<double> getTPCLimits();
      
 
    private:
      void Intialize();
      
+     double getCalibOffset(std::vector<double> sVec, axisType comp, int face);
      
+     double getTruthOffset(std::vector<double> sVec, axisType comp, bool isFwd = false);
                
      void loadTruthMap(bool isFwd = false);          
      
@@ -442,6 +440,26 @@ class SCECalib{
      std::vector< std::vector<float> > xCathodeMap;
      std::vector< std::vector<float> > yCathodeMap;
      std::vector< std::vector<float> > zCathodeMap;
+     
+     std::vector< std::vector<float> > xTopMapError;
+     std::vector< std::vector<float> > yTopMapError;
+     std::vector< std::vector<float> > zTopMapError;
+     
+     std::vector< std::vector<float> > xBottomMapError;
+     std::vector< std::vector<float> > yBottomMapError;
+     std::vector< std::vector<float> > zBottomMapError;
+     
+     std::vector< std::vector<float> > xUpstreamMapError;
+     std::vector< std::vector<float> > yUpstreamMapError;
+     std::vector< std::vector<float> > zUpstreamMapError;
+     
+     std::vector< std::vector<float> > xDownstreamMapError;
+     std::vector< std::vector<float> > yDownstreamMapError;
+     std::vector< std::vector<float> > zDownstreamMapError;
+     
+     std::vector< std::vector<float> > xCathodeMapError;
+     std::vector< std::vector<float> > yCathodeMapError;
+     std::vector< std::vector<float> > zCathodeMapError;
      
      
      

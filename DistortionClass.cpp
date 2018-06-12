@@ -2966,11 +2966,130 @@ int SCECalib::calculate2DMaps(std::vector<distortionMap> faceCalibDistortions){
 
 }
 
+int SCECalib::calculate2DMapErrs(std::vector<distortionMap> faceCalibDistortions){
+    xTopMapError = faceCalibDistortions[0].calculateMapErrors(0);
+    yTopMapError = faceCalibDistortions[1].calculateMapErrors(0);
+    zTopMapError = faceCalibDistortions[2].calculateMapErrors(0);
+    
+    xBottomMapError = faceCalibDistortions[0].calculateMapErrors(1);
+    yBottomMapError = faceCalibDistortions[1].calculateMapErrors(1);
+    zBottomMapError = faceCalibDistortions[2].calculateMapErrors(1);
+    
+    xUpstreamMapError = faceCalibDistortions[0].calculateMapErrors(2);
+    yUpstreamMapError = faceCalibDistortions[1].calculateMapErrors(2);
+    zUpstreamMapError = faceCalibDistortions[2].calculateMapErrors(2);
+    
+    xDownstreamMapError = faceCalibDistortions[0].calculateMapErrors(3);
+    yDownstreamMapError = faceCalibDistortions[1].calculateMapErrors(3);
+    zDownstreamMapError = faceCalibDistortions[2].calculateMapErrors(3);
+    
+    xCathodeMapError = faceCalibDistortions[0].calculateMapErrors(4);
+    yCathodeMapError = faceCalibDistortions[1].calculateMapErrors(4);
+    zCathodeMapError = faceCalibDistortions[2].calculateMapErrors(4);
+    
+    return 0;
+
+}
+
+std::vector< std::vector< std::vector<float> > > SCECalib::get2DMaps(axisType comp){
+      std::vector< std::vector< std::vector<float> > > return_vec;
+      if(comp == axisType::xAxis){
+      
+        return_vec.push_back(xTopMap);
+        return_vec.push_back(xBottomMap);
+	return_vec.push_back(xUpstreamMap);
+	return_vec.push_back(xDownstreamMap);
+	return_vec.push_back(xCathodeMap);
+      }
+      
+      else if(comp == axisType::yAxis){
+         return_vec.push_back(yTopMap);
+	 return_vec.push_back(yBottomMap);
+	 return_vec.push_back(yUpstreamMap);
+	 return_vec.push_back(yDownstreamMap);
+	 return_vec.push_back(yCathodeMap);
+      
+      }	
+      
+      
+      else if(comp == axisType::zAxis){      
+         return_vec.push_back(zTopMap);      
+         return_vec.push_back(zBottomMap);
+         return_vec.push_back(zUpstreamMap);     
+         return_vec.push_back(zDownstreamMap);     
+         return_vec.push_back(zCathodeMap);
+      }
+      
+      else
+         return return_vec;
+      
+      return return_vec;	       
+
+}
+
+std::vector< std::vector< std::vector<float> > > SCECalib::get2DMapErrs(axisType comp){
+      std::vector< std::vector< std::vector<float> > > return_vec;
+      if(comp == axisType::xAxis){
+      
+        return_vec.push_back(xTopMapError);
+        return_vec.push_back(xBottomMapError);
+	return_vec.push_back(xUpstreamMapError);
+	return_vec.push_back(xDownstreamMapError);
+	return_vec.push_back(xCathodeMapError);
+      }
+      
+      else if(comp == axisType::yAxis){
+         return_vec.push_back(yTopMapError);
+	 return_vec.push_back(yBottomMapError);
+	 return_vec.push_back(yUpstreamMapError);
+	 return_vec.push_back(yDownstreamMapError);
+	 return_vec.push_back(yCathodeMapError);
+      
+      }	
+      
+      
+      else if(comp == axisType::zAxis){      
+         return_vec.push_back(zTopMapError);      
+         return_vec.push_back(zBottomMapError);
+         return_vec.push_back(zUpstreamMapError);     
+         return_vec.push_back(zDownstreamMapError);     
+         return_vec.push_back(zCathodeMapError);
+      }
+      
+      else
+         return return_vec;
+      
+      return return_vec;	       
+
+}
+
+std::vector<int> SCECalib::getCalibDivisions(){
+    std::vector<int> return_vec;
+    return_vec.push_back(nCalibDivisions_x);
+    return_vec.push_back(nCalibDivisions_y);
+    return_vec.push_back(nCalibDivisions_z);
+    return return_vec;
+
+}
+
+std::vector<double> SCECalib::getTPCLimits(){
+    std::vector<double> return_vec;
+    return_vec.push_back(Lx);
+    return_vec.push_back(Ly);
+    return_vec.push_back(Lz);
+    return return_vec;
+
+}
+
 int main(int argc, char *argv[]){
    
-   calibSteps runType; 
-   if(argc == 1)   
+   calibSteps runType;
+   std::string fileName = "Unkown";
+   const char * RunTypeStrings[] = { "BulkOnly", "FaceOnly", "FaceAndBulk", "FullCalib" }; 
+   if(argc == 1){   
     runType = calibSteps::fullCalib;
+    fileName = RunTypeStrings[runType];
+   } 
    
    else if (argc == 2){
     int run = atoi(argv[1]);
@@ -2979,7 +3098,20 @@ int main(int argc, char *argv[]){
       return -1;  
     
     }
+    fileName = RunTypeStrings[run];
     runType = static_cast<calibSteps>(run);
+   }
+   
+   else if (argc == 3){
+    int run = atoi(argv[1]);
+    if(run < 0 || run > 3){
+      std::cerr << "FATAL: Calibration modes can only be between 0 (face only) and 3 (fullCalib). You entered " << run << std::endl;
+      return -1;  
+    
+    }
+    fileName = argv[2];
+    runType = static_cast<calibSteps>(run);
+    
    }
    
    else{
@@ -2998,25 +3130,10 @@ int main(int argc, char *argv[]){
    
    std::cout << "Number of Tracks: " << cosmicCalibTracks.size() << std::endl;
    
-   //Set up output tree
-   TFile *outputFile = new TFile("output.root","RECREATE");
-   /*TTree *T_calib = new TTree("SpaCEtree_calib","SpaCEtree_calib");
-   T_calib->Branch("x_true",&x_true,"data_calib/D");
-   T_calib->Branch("y_true",&y_true,"data_calib/D");
-   T_calib->Branch("z_true",&z_true,"data_calib/D");
-   T_calib->Branch("x_reco",&x_reco,"data_calib/D");
-   T_calib->Branch("y_reco",&y_reco,"data_calib/D");
-   T_calib->Branch("z_reco",&z_reco,"data_calib/D");
-   T_calib->Branch("Dx",&Dx,"data_calib/D");
-   T_calib->Branch("Dy",&Dy,"data_calib/D");
-   T_calib->Branch("Dz",&Dz,"data_calib/D");
-   T_calib->Branch("DxErr",&DxErr,"data_calib/D");
-   T_calib->Branch("DyErr",&DyErr,"data_calib/D");
-   T_calib->Branch("DzErr",&DzErr,"data_calib/D");
+   std::vector<int> divisions = calibrator->getCalibDivisions();
+   std::vector<double> limits  = calibrator->getTPCLimits();
    
-   T_calib->Branch("elecFate",&elecFate,"data_calib/I");
    
-   T_calib->SetDirectory(outputFile);*/
    
    std::vector< std::vector < std::vector<float> > > xMap;     
    std::vector< std::vector < std::vector<float> > > xMapErrs; 
@@ -3026,6 +3143,15 @@ int main(int argc, char *argv[]){
 
    std::vector< std::vector < std::vector<float> > > zMap;     
    std::vector< std::vector < std::vector<float> > > zMapErrs;
+   
+   std::vector< std::vector < std::vector<float> > > xFaceMap;     
+   std::vector< std::vector < std::vector<float> > > xFaceMapErrs; 
+
+   std::vector< std::vector < std::vector<float> > > yFaceMap;     
+   std::vector< std::vector < std::vector<float> > > yFaceMapErrs; 
+
+   std::vector< std::vector < std::vector<float> > > zFaceMap;     
+   std::vector< std::vector < std::vector<float> > > zFaceMapErrs;
    
 
   switch (runType)  {
@@ -3042,8 +3168,10 @@ int main(int argc, char *argv[]){
   
     zMap     =  calibDistortions[2].calculateMap();
     zMapErrs =  calibDistortions[2].calculateMapErrors();
+    
+     
           
-    return 0;
+    break;
    }
    
    case(faceOnly) : {
@@ -3051,43 +3179,329 @@ int main(int argc, char *argv[]){
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
      calibrator->calculate2DMaps(faceCalibDistortions);
      faceCalibrated = true;
-     return 0;
+     
+     xFaceMap = calibrator->get2DMaps(axisType::xAxis);
+     xFaceMapErrs = calibrator->get2DMaps(axisType::xAxis);
+     
+     yFaceMap = calibrator->get2DMaps(axisType::yAxis);
+     yFaceMapErrs = calibrator->get2DMaps(axisType::yAxis);
+     
+     zFaceMap = calibrator->get2DMaps(axisType::zAxis);               
+     zFaceMapErrs = calibrator->get2DMaps(axisType::zAxis);
+     
+     
+     break;
    
    }
    
    case(bulkAndFace) : {
      std::cout << "Running Bulk then Face Calibration." << std::endl;
      std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
+     
+     xMap     =  calibDistortions[0].calculateMap();
+     xMapErrs =  calibDistortions[0].calculateMapErrors();
+  
+     yMap     =  calibDistortions[1].calculateMap();
+     yMapErrs =  calibDistortions[1].calculateMapErrors();
+  
+     zMap     =  calibDistortions[2].calculateMap();
+     zMapErrs =  calibDistortions[2].calculateMapErrors();
+     
+     
      calibrator->loadTruthMap(calibDistortions);     
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
      calibrator->calculate2DMaps(faceCalibDistortions);
      faceCalibrated = true;
      
-     return 0;
+     xFaceMap = calibrator->get2DMaps(axisType::xAxis);
+     xFaceMapErrs = calibrator->get2DMaps(axisType::xAxis);
+     
+     yFaceMap = calibrator->get2DMaps(axisType::yAxis);
+     yFaceMapErrs = calibrator->get2DMaps(axisType::yAxis);
+     
+     zFaceMap = calibrator->get2DMaps(axisType::zAxis);          
+     zFaceMapErrs = calibrator->get2DMaps(axisType::zAxis);
+     
+     break;
              
    }
    
    case(fullCalib) : {
      std::cout << "Running Full Chain Calibration." << std::endl;
-     std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
+     std::vector<distortionMap> calibDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);          
      calibrator->loadTruthMap(calibDistortions);     
      std::vector<distortionMap> faceCalibDistortions = calibrator->doCalibFaces(cosmicCalibTracks, 50, 15);
      calibrator->calculate2DMaps(faceCalibDistortions);
+     
+     xFaceMap = calibrator->get2DMaps(axisType::xAxis);
+     xFaceMapErrs = calibrator->get2DMaps(axisType::xAxis);
+     
+     yFaceMap = calibrator->get2DMaps(axisType::yAxis);
+     yFaceMapErrs = calibrator->get2DMaps(axisType::yAxis);
+     
+     zFaceMap = calibrator->get2DMaps(axisType::zAxis);     
+     zFaceMapErrs = calibrator->get2DMaps(axisType::zAxis);
+     
      faceCalibrated = true;
      calibrator->getCosmicTrackSet(faceCalibrated);              
      std::vector<distortionMap> finalDistortions = calibrator->doCosmicCosmicCalib(cosmicCalibTracks);
-     return 0;
+     
+     xMap     =  finalDistortions[0].calculateMap();
+     xMapErrs =  finalDistortions[0].calculateMapErrors();
+  
+     yMap     =  finalDistortions[1].calculateMap();
+     yMapErrs =  finalDistortions[1].calculateMapErrors();
+  
+     zMap     =  finalDistortions[2].calculateMap();
+     zMapErrs =  finalDistortions[2].calculateMapErrors();
+     
+     break;
         
    }
    
    default : return 1;
   }
   
-  //probably shouldn't get here 
-  return -1;
-   
-   
+  double x_true, y_true, z_true;
+  double x_reco, y_reco, z_reco;
+  double Dx, Dy, Dz;
+  double DxErr, DyErr, DzErr;
+  
+  
+  
+  
+  //Set up output tree
+  TFile *outputFile = new TFile(Form("%sOutput.root", fileName.c_str()), "RECREATE");
+  TTree *T_calibBulk = new TTree("SCEtreeBulk_calib","SCEtreeBulk_calib");
+  TTree *T_calibFaces = new TTree("SCEtreeFace_calib","SCEtreeFace_calib");
+  
+  T_calibBulk->Branch("x_true",&x_true,"data_calibBulk/D");
+  T_calibBulk->Branch("y_true",&y_true,"data_calibBulk/D");
+  T_calibBulk->Branch("z_true",&z_true,"data_calibBulk/D");
+  T_calibBulk->Branch("x_reco",&x_reco,"data_calibBulk/D");
+  T_calibBulk->Branch("y_reco",&y_reco,"data_calibBulk/D");
+  T_calibBulk->Branch("z_reco",&z_reco,"data_calibBulk/D");
+  
+  T_calibBulk->Branch("Dx",&Dx,"data_calibBulk/D");
+  T_calibBulk->Branch("Dy",&Dy,"data_calibBulk/D");
+  T_calibBulk->Branch("Dz",&Dz,"data_calibBulk/D");
+  T_calibBulk->Branch("DxErr",&DxErr,"data_calibBulk/D");
+  T_calibBulk->Branch("DyErr",&DyErr,"data_calibBulk/D");
+  T_calibBulk->Branch("DzErr",&DzErr,"data_calibBulk/D");
 
+  T_calibFaces->Branch("x_true",&x_true,"data_calibFace/D");
+  T_calibFaces->Branch("y_true",&y_true,"data_calibFace/D");
+  T_calibFaces->Branch("z_true",&z_true,"data_calibFace/D");
+  T_calibFaces->Branch("x_reco",&x_reco,"data_calibFace/D");
+  T_calibFaces->Branch("y_reco",&y_reco,"data_calibFace/D");
+  T_calibFaces->Branch("z_reco",&z_reco,"data_calibFace/D");
+  
+  T_calibFaces->Branch("Dx",&Dx,"data_calibFace/D");
+  T_calibFaces->Branch("Dy",&Dy,"data_calibFace/D");
+  T_calibFaces->Branch("Dz",&Dz,"data_calibFace/D");
+  T_calibFaces->Branch("DxErr",&DxErr,"data_calibFace/D");
+  T_calibFaces->Branch("DyErr",&DyErr,"data_calibFace/D");
+  T_calibFaces->Branch("DzErr",&DzErr,"data_calibFace/D");
+  
+
+  
+  T_calibBulk->SetDirectory(outputFile);
+  T_calibFaces->SetDirectory(outputFile);
+  
+  x_reco = -1.0*limits[0]/divisions[0];
+  if(xMap.size() > 0 && yMap.size() > 0 && zMap.size() > 0){
+    for(int x = 0; x <= divisions[0]; x++){
+    x_reco += limits[0]/divisions[0];
+    y_reco = -1.0*limits[1]/divisions[1];
+  
+      for(int y = 0; y <= divisions[1]; y++){
+        y_reco += limits[1]/divisions[1];
+        z_reco = -1.0*limits[2]/divisions[2];
+  
+        for(int z = 0; z <= divisions[2]; z++){
+          z_reco += limits[2]/divisions[2];
+  
+          Dx = xMap[x][y][z];
+          Dy = yMap[x][y][z];
+          Dz = zMap[x][y][z];
+	
+	  DxErr = xMapErrs[x][y][z];
+          DyErr = yMapErrs[x][y][z];
+          DzErr = zMapErrs[x][y][z];
+
+          x_true = x_reco+Dx;
+          y_true = y_reco+Dy;
+          z_true = z_reco+Dz;
+
+    
+          T_calibBulk->Fill();
+       }
+     }
+   }
+  
+  }//end of if 3d maps
+  
+  if(xFaceMap.size() > 0 && yFaceMap.size() > 0 && zFaceMap.size() > 0){
+    x_reco = -1.0*limits[0]/divisions[0];
+    int faceNum = 0;
+    for(int x = 0; x <= divisions[0]; x++){
+      x_reco += limits[0]/divisions[0];
+      z_reco = -1.0*limits[2]/divisions[2];
+  
+      for(int z = 0; z <= divisions[2]; z++){
+        z_reco += limits[2]/divisions[2];
+
+        if(x == divisions[0]) {
+          Dx = 0.0;
+          Dy = 0.0;
+          Dz = 0.0;
+        }
+	
+        else {
+          Dx = xFaceMap[faceNum][x][z];
+          Dy = yFaceMap[faceNum][x][z];
+          Dz = zFaceMap[faceNum][x][z];
+         
+	}
+	
+        x_true = x_reco+Dx;
+        y_true = limits[1];
+        y_reco = y_true-Dy;
+        z_true = z_reco+Dz;      
+        T_calibFaces->Fill();
+    }
+  }
+
+  faceNum = 1;
+  x_reco = -1.0*limits[0]/divisions[0];
+  for(int x = 0; x <= divisions[0]; x++)
+  {
+    x_reco += limits[0]/divisions[0];
+    z_reco = -1.0*limits[2]/divisions[2];
+  
+    for(int z = 0; z <= divisions[2]; z++)
+    {
+      z_reco += limits[2]/divisions[2];
+
+      if(x == divisions[0]) {
+        Dx = 0.0;
+        Dy = 0.0;
+        Dz = 0.0;
+      }
+      else {
+        Dx = xFaceMap[faceNum][x][z];
+        Dy = yFaceMap[faceNum][x][z];
+        Dz = zFaceMap[faceNum][x][z];
+      }
+
+      x_true = x_reco+Dx;
+      y_true = 0.0;
+      y_reco = y_true-Dy;
+      z_true = z_reco+Dz;
+  
+    
+      T_calibFaces->Fill();
+    }
+  }
+  
+  faceNum = 2;
+  x_reco = -1.0*limits[0]/divisions[0];
+  for(int x = 0; x <= divisions[0]; x++)
+  {
+    x_reco += limits[0]/divisions[0];
+    y_reco = -1.0*limits[1]/divisions[1];
+  
+    for(int y = 0; y <= divisions[1]; y++)
+    {
+      y_reco += limits[1]/divisions[1];
+
+      if(x == divisions[0]) {
+        Dx = 0.0;
+        Dy = 0.0;
+        Dz = 0.0;
+      }
+      else {
+        Dx = xFaceMap[faceNum][x][y];
+        Dy = yFaceMap[faceNum][x][y];
+        Dz = zFaceMap[faceNum][x][y];
+      }
+
+      x_true = x_reco+Dx;
+      y_true = y_reco+Dy;
+      z_true = 0.0;
+      z_reco = z_true-Dz;
+  
+    
+      T_calibFaces->Fill();
+    }
+  }
+  
+  faceNum = 3;
+  x_reco = -1.0*limits[0]/divisions[0];
+  for(int x = 0; x <= divisions[0]; x++)
+  {
+    x_reco += limits[0]/divisions[0];
+    y_reco = -1.0*limits[2]/divisions[1];
+  
+    for(int y = 0; y <= divisions[1]; y++)
+    {
+      y_reco += limits[1]/divisions[1];
+
+      if(x == divisions[0]) {
+        Dx = 0.0;
+        Dy = 0.0;
+        Dz = 0.0;
+      }
+      else {
+        Dx = xFaceMap[faceNum][x][y];
+        Dy = yFaceMap[faceNum][x][y];
+        Dz = zFaceMap[faceNum][x][y];
+      }
+
+      x_true = x_reco+Dx;
+      y_true = y_reco+Dy;
+      z_true = limits[2];
+      z_reco = z_true-Dz;
+  
+    
+      T_calibFaces->Fill();
+    }
+  }
+  
+  faceNum = 4;
+  y_reco = -1.0*limits[1]/divisions[1];
+  for(int y = 0; y <= divisions[1]; y++)
+  {    
+    y_reco = limits[1]/divisions[1];
+    z_reco = -1.0*limits[2]/divisions[2];
+  
+    for(int z = 0; z <= divisions[2]; z++)
+    {
+      z_reco += limits[2]/divisions[2];
+
+      Dx = xFaceMap[faceNum][y][z];
+      Dy = yFaceMap[faceNum][y][z];
+      Dz = zFaceMap[faceNum][y][z];
+
+
+      x_true = 0.0;
+      x_reco = x_true-Dx;
+      y_true = y_reco+Dy;
+      z_true = z_reco+Dz;
+  
+    
+      T_calibFaces->Fill();
+    }
+  }
+  
+  }//end of if 2d maps
+   
+  
+  T_calibBulk->Write(); 
+  T_calibFaces->Write();
+  outputFile->Close();
+   
+  return 0;
 }
 
 
