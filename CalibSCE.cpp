@@ -51,7 +51,7 @@ const Char_t *inputFileLaser = "data/laserDataSCE_NEW.root";
 //const Char_t *inputFileCosmic = "data/oldMCsample_50000events.root";
 //const Char_t *inputFileCosmic = "data/newMCsample_2Mevents.root";
 //const Char_t *inputFileCosmic = "data/MC_Cosmics.root";
-const Char_t *inputFileCosmic = "/uboone/data/users/joelam/MCExtForSCE.root";
+const Char_t *inputFileCosmic = "/uboone/data/users/mrmooney/MC_Cosmics.root";
 //const Char_t *inputFileCosmic = "data/Data_Run1_EXTBNB.root";
 //const Char_t *inputFileCosmic = "data/first_set_of_EXTBNB_production.root";
 //const Char_t *inputFileCosmic = "data/cosmicDataSCE_ProtoDUNESP.root";
@@ -76,12 +76,12 @@ const Double_t maxYdist = 0.20;
 const Double_t maxZdist = 0.20;
 
 Int_t minInputTrackNum = 0;
-//Int_t maxInputTrackNum = 1000000000;
-Int_t maxInputTrackNum = 1150000;
+Int_t maxInputTrackNum = 1000000000;
+//Int_t maxInputTrackNum = 1150000;
 
 //const Int_t maxCosmicTracks = -1;
-//const Int_t maxCosmicTracks = 10000000;
-const Int_t maxCosmicTracks = 100;
+const Int_t maxCosmicTracks = 10000000;
+//const Int_t maxCosmicTracks = 1000000;
 //const Int_t maxCosmicTracks = 30000;
 //const Int_t maxCosmicTracks = 10000;
 
@@ -260,11 +260,11 @@ Int_t main(Int_t argc, Char_t** argv)
 
   saveTrackInfo(cosmicTracks);
 
-  //doCalibFaces(cosmicTracks,50,15); // was 50,15
+  doCalibFaces(cosmicTracks,50,15); // was 50,15
   ////doCalibration(laserTracks,cosmicTracks,0.05,3,1,1);
   ////doCalibration(laserTracks,cosmicTracks,0.02,3,1,1);
   //////doCalibration(laserTracks,cosmicTracks,0.01,3,0,2);
-  doCalibration(laserTracks,cosmicTracks,0.01,3,1,1); // Nominal Configuration
+  //doCalibration(laserTracks,cosmicTracks,0.01,3,1,1); // Nominal Configuration
   ////doCalibration(laserTracks,cosmicTracks,0.01,1,1,1); // Nominal Configuration #2
   
   timer.Stop();
@@ -953,7 +953,7 @@ vector<trackInfo> getLArSoftTrackSet(Int_t inputType)
 	}
 	else {
           xS += SCEfactor*getTruthFwdOffset(0.0,yE+getTruthOffset(xE,yE,zE,2),zE+getTruthOffset(xE,yE,zE,3),1);
-	  std::cout << getTruthFwdOffset(0.0,yE+getTruthOffset(xE,yE,zE,2),zE+getTruthOffset(xE,yE,zE,3),1) << std::endl;
+	  //std::cout << getTruthFwdOffset(0.0,yE+getTruthOffset(xE,yE,zE,2),zE+getTruthOffset(xE,yE,zE,3),1) << std::endl;
 	}
       }
       
@@ -1792,7 +1792,17 @@ void doCosmicCosmicCalib(const vector<calibTrackInfo> &cosmicCalibTracks, Double
       zCalibLowIndex = TMath::Floor((zValDistorted/Lz)*nCalibDivisions_z);
       zCalibHighIndex = TMath::Ceil((zValDistorted/Lz)*nCalibDivisions_z);
 
-      if(xValDistorted < 0.0) {
+     
+      
+      //cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xCalibLowIndex << " " << yCalibLowIndex << " " << zCalibLowIndex << " " << xCalibHighIndex << " " << yCalibHighIndex << " " << zCalibHighIndex << " " << xCalibFrac << " " << yCalibFrac << " " << zCalibFrac << " " << calibTrackA.track.electrons.size() << " " << calibTrackB.track.electrons.size() << endl;
+      //cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << dTheta*(180.0/piVal) << " Ax1 " << calibTrackA.track.x1 << " Ax0 " << calibTrackA.track.x0 << " Ay1 " << calibTrackA.track.y1 << " Ay0 " << calibTrackA.track.y0 << " Az1 " << calibTrackA.track.z1 << " Az0 " << calibTrackA.track.z0 <<  " Bx1 " << calibTrackB.track.x1 << " Bx0 " << calibTrackB.track.x0 << " By1 " << calibTrackB.track.y1 << " By0 " << calibTrackB.track.y0 << " Bz1 " << calibTrackB.track.z1 << " Bz0 " << calibTrackB.track.z0 << endl;
+      cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << dTheta*(180.0/piVal) << endl;
+
+      xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((Double_t) xCalibLowIndex);
+      yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((Double_t) yCalibLowIndex);
+      zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((Double_t) zCalibLowIndex);
+      
+       if(xValDistorted < 0.0) {
         xCalibLowIndex = 0;
 	xCalibHighIndex = 1;
 	xCalibFrac = 0.0;
@@ -1824,14 +1834,6 @@ void doCosmicCosmicCalib(const vector<calibTrackInfo> &cosmicCalibTracks, Double
 	zCalibHighIndex = nCalibDivisions_z;
 	zCalibFrac = 1.0;
       }
-      
-      //cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xCalibLowIndex << " " << yCalibLowIndex << " " << zCalibLowIndex << " " << xCalibHighIndex << " " << yCalibHighIndex << " " << zCalibHighIndex << " " << xCalibFrac << " " << yCalibFrac << " " << zCalibFrac << " " << calibTrackA.track.electrons.size() << " " << calibTrackB.track.electrons.size() << endl;
-      //cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << dTheta*(180.0/piVal) << " Ax1 " << calibTrackA.track.x1 << " Ax0 " << calibTrackA.track.x0 << " Ay1 " << calibTrackA.track.y1 << " Ay0 " << calibTrackA.track.y0 << " Az1 " << calibTrackA.track.z1 << " Az0 " << calibTrackA.track.z0 <<  " Bx1 " << calibTrackB.track.x1 << " Bx0 " << calibTrackB.track.x0 << " By1 " << calibTrackB.track.y1 << " By0 " << calibTrackB.track.y0 << " Bz1 " << calibTrackB.track.z1 << " Bz0 " << calibTrackB.track.z0 << endl;
-      cout << "  " << j << " " << distVal << " " << distValDistorted << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << dTheta*(180.0/piVal) << endl;
-
-      xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((Double_t) xCalibLowIndex);
-      yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((Double_t) yCalibLowIndex);
-      zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((Double_t) zCalibLowIndex);
 
       tempFactor = distWeight*(1.0-xCalibFrac)*(1.0-yCalibFrac)*(1.0-zCalibFrac);
       calibWeight[xCalibLowIndex][yCalibLowIndex][zCalibLowIndex] += tempFactor;
@@ -3023,6 +3025,10 @@ void doCalibFaces(const vector<trackInfo> &cosmicTracks, Int_t minTrackPoints, I
     zCalibLowIndex = TMath::Floor((zValDistorted/Lz)*nCalibDivisions_z);
     zCalibHighIndex = TMath::Ceil((zValDistorted/Lz)*nCalibDivisions_z);
     
+    xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((Double_t) xCalibLowIndex);
+    yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((Double_t) yCalibLowIndex);
+    zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((Double_t) zCalibLowIndex);
+    
     if(xValDistorted < 0.0) {
       xCalibLowIndex = 0;
       xCalibHighIndex = 1;
@@ -3056,9 +3062,7 @@ void doCalibFaces(const vector<trackInfo> &cosmicTracks, Int_t minTrackPoints, I
       zCalibFrac = 1.0;
     }
     
-    xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((Double_t) xCalibLowIndex);
-    yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((Double_t) yCalibLowIndex);
-    zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((Double_t) zCalibLowIndex);
+
     
     if (whichFace == 0) {
       tempFactor = (1.0-xCalibFrac)*(1.0-zCalibFrac);
@@ -3202,8 +3206,8 @@ void doCalibFaces(const vector<trackInfo> &cosmicTracks, Int_t minTrackPoints, I
       calibCathodeDeltaZ[yCalibHighIndex][zCalibHighIndex] += tempFactor*(zVal-zValDistorted);
     }
 
-    if (whichFace >= 0) {
-      cout << "  " << whichFace << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << endl;
+    if (whichFace == 0) {
+      cout << "  " << whichFace << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << (xVal - xValDistorted) << " " << (yVal - yValDistorted) << " " << (zVal - zValDistorted) << " " << tempFactor << endl;
     }
   }
   
@@ -3211,6 +3215,7 @@ void doCalibFaces(const vector<trackInfo> &cosmicTracks, Int_t minTrackPoints, I
   {
     for(Int_t z = 0; z <= nCalibDivisions_z; z++)
     {
+      //Looks like a bug if weight < 0.0 ...
       if(calibTopWeight[x][z] > 0.0) {
         calibTopDeltaX[x][z] /= calibTopWeight[x][z];
         calibTopDeltaY[x][z] /= calibTopWeight[x][z];

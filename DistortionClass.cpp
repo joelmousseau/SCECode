@@ -108,15 +108,17 @@ float distortionVoxel::calculateRMS() const{
 
 float distortionVoxel::calculateMedian() const{
     float median = 0.0;
+    
+    
     if(distortions.size() == 0 || weights.size() == 0)
        return median;
     float wSum = calculateWeightSum();    
 
     if( wSum < 1e-6 && wSum > -1e6)
        return median;   
-    int pairs = getNPairs();
+    int pairs = getNPairs();    
     
-    median = TMath::Median(pairs, &distortions[0], &weights[0] );
+    median = TMath::Median(pairs, &distortions[0], &weights[0] );              
     return median;
 }
 
@@ -781,6 +783,22 @@ void SCECalib::loadTruthMap(std::vector<distortionMap>& inputMaps){
 
 }
 
+std::pair<double, float> SCECalib::setSign(double weight, float dist) const{
+  std::pair<double, float> return_pair;
+  if(weight >=  0.0 ){
+    return_pair.first = weight;
+    return_pair.second = dist;
+  }
+  
+  else{
+    return_pair.first = -1.0*weight;
+    return_pair.second = -1.0*dist;
+  }
+  
+  return return_pair;
+
+}
+
 std::vector<trackInfo> SCECalib::getLaserTrackSet(){
   std::vector<trackInfo> tracks;
 
@@ -1439,7 +1457,7 @@ double SCECalib::getCalibOffset(std::vector<double> sVec, axisType comp, int fac
 void SCECalib::Intialize(){
   inputFileLaser = "data/laserDataSCE_NEW.root";
 
-  inputFileCosmic = "/uboone/data/users/joelam/MCExtForSCE.root";  
+  inputFileCosmic = "/uboone/data/users/mrmooney/MC_Cosmics.root";  
 
   Lx = 2.5;
   Ly = 2.5;
@@ -1459,16 +1477,20 @@ void SCECalib::Intialize(){
   distScale     = 0.01;
 
   minInputTrackNum = 0;
-  maxInputTrackNum = 1150000;
+  maxInputTrackNum = 1000000000;
   
   SCEFactor = 1.0;
 
-  maxCosmicTracks = 100;
-
+  maxCosmicTracks = 10000000;
+  /*
   minTrackMCS_anode = 3.3;
   minTrackMCS_cathode = 1.7;
   minTrackMCS_crossing = 1.4;
+*/
 
+  minTrackMCS_anode = 0.0;
+  minTrackMCS_cathode = 0.0;
+  minTrackMCS_crossing = 0.0;
   nCalibDivisions = 25; // MICROBOONE
 //Int_t nCalibDivisions = 18; // PROTODUNE-SP
 
@@ -1481,127 +1503,7 @@ void SCECalib::Intialize(){
   randSeed = 1; //set this to 0 to get a random seed
 
 }
-/*
-int SCECalib::doCalibration(const std::vector<trackInfo> &laserTracks, const std::vector<trackInfo> &cosmicTracks){
-  
-  
-  std::vector<calibTrackInfo> cosmicCalibTracks = makeCalibTracks(cosmicTracks);
 
-  
-  std::cout << track.x0 << " " << track.y0 << " " << track.z0 << std::endl;
-  std::cout << calibTrack.x0 << " " << calibTrack.y0 << " " << calibTrack.z0 << std::endl;
-  
-  std::vector<elecInfo> electronsNonCalib = track.electrons;
-  std::vector<elecInfo> electronsCalib    = calibTrack.electrons;
-  
-  std::cout << electronsNonCalib.size() << ", " << electronsCalib.size() << std::endl;
-  
-  for(unsigned int i = 0; i != electronsCalib.size(); ++i){
-     std::cout << electronsNonCalib.at(i).x << ", " << electronsNonCalib.at(i).y << ", " << electronsNonCalib.at(i).z << std::endl;
-     std::cout << electronsCalib.at(i).x << ", " << electronsCalib.at(i).y << ", " << electronsCalib.at(i).z << std::endl;
-  }
-  
-  double x_true, y_true, z_true;
-  double x_reco, y_reco, z_reco;
-  double Dx, Dy, Dz;
-  int elecFate;
-  
-  TTree *T_calib = new TTree("SpaCEtree_calib","SpaCEtree_calib");
-  T_calib->Branch("x_true",&x_true,"data_calib/D");
-  T_calib->Branch("y_true",&y_true,"data_calib/D");
-  T_calib->Branch("z_true",&z_true,"data_calib/D");
-  T_calib->Branch("x_reco",&x_reco,"data_calib/D");
-  T_calib->Branch("y_reco",&y_reco,"data_calib/D");
-  T_calib->Branch("z_reco",&z_reco,"data_calib/D");
-  T_calib->Branch("Dx",&Dx,"data_calib/D");
-  T_calib->Branch("Dy",&Dy,"data_calib/D");
-  T_calib->Branch("Dz",&Dz,"data_calib/D");
-  T_calib->Branch("elecFate",&elecFate,"data_calib/I");
-  T_calib->SetDirectory(outputFile); 
-  
-  std::cout << "Number of Tracks: " << cosmicCalibTracks.size() << std::endl;
-  
-  switch (stepsToRun)  {
-   case(bulkOnly) : {
-                                      
-    std::vector<distortionMap> calibDistortions = doCosmicCosmicCalib(cosmicCalibTracks);
-    
-  
-    std::vector< std::vector < std::vector<float> > > xMap     =  calibDistortions[0].calculateMap();
-    std::vector< std::vector < std::vector<float> > > xMapErrs =  calibDistortions[0].calculateMapErrors();
-  
-    std::vector< std::vector < std::vector<float> > > yMap     =  calibDistortions[1].calculateMap();
-    std::vector< std::vector < std::vector<float> > > yMapErrs =  calibDistortions[1].calculateMapErrors();
-  
-    std::vector< std::vector < std::vector<float> > > zMap     =  calibDistortions[2].calculateMap();
-    std::vector< std::vector < std::vector<float> > > zMapErrs =  calibDistortions[2].calculateMapErrors();
-  
-    return 0;
-   }
-   
-   case(faceOnly) : {
-     std::vector<distortionMap> faceCalibDistortions = doCalibFaces(cosmicCalibTracks, 50, 15);
-     calculate2DMaps(faceCalibDistortions);
-     return 0;
-   
-   }
-   
-   case(bulkAndFace) : {
-     std::vector<distortionMap> calibDistortions = doCosmicCosmicCalib(cosmicCalibTracks);
-     loadTruthMap(calibDistortions);     
-     std::vector<distortionMap> faceCalibDistortions = doCalibFaces(cosmicCalibTracks, 50, 15);
-     calculate2DMaps(faceCalibDistortions);
-     faceCalibrated = true;
-     return 0;
-     
-     
-   
-   }
-   
-   case(fullCalib) : {
-     std::vector<distortionMap> calibDistortions = doCosmicCosmicCalib(cosmicCalibTracks);
-     loadTruthMap(calibDistortions);     
-     std::vector<distortionMap> faceCalibDistortions = doCalibFaces(cosmicCalibTracks, 50, 15);
-     faceCalibrated = true;
-     calculate2DMaps(faceCalibDistortions);              
-     std::vector<distortionMap> finalDistortions = doCosmicCosmicCalib(cosmicCalibTracks);
-     return 0;
-     
-   
-   }
-   
-   default : return 1;
-   
- }          
-  
-
-  x_reco = -1.0*Lx/nCalibDivisions_x;
-  for(Int_t x = 0; x <= nCalibDivisions_x; x++)
-  {
-    x_reco += Lx/nCalibDivisions_x;
-    y_reco = -1.0*Ly/nCalibDivisions_y;
-  
-    for(Int_t y = 0; y <= nCalibDivisions_y; y++)
-    {
-      y_reco += Ly/nCalibDivisions_y;
-      z_reco = -1.0*Lz/nCalibDivisions_z;
-  
-      for(Int_t z = 0; z <= nCalibDivisions_z; z++)
-      {
-        
-        if(calibWeight[x][y][z] > 0.0)
-          elecFate = 1;
-	else
-          elecFate = 0;
-    
-        T_calib->Fill();
-      }
-    }
-  }
-  
-  //probably shouldn't get here...
-  return -1;
-}*/
 
 std::vector<distortionMap> SCECalib::doCosmicCosmicCalib(const std::vector<calibTrackInfo> &cosmicCalibTracks)
 {
@@ -2388,12 +2290,12 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
   distortionMap deltaYMap;
   distortionMap deltaZMap;
 
-  double xVal;
-  double yVal;
-  double zVal;
-  double xValDistorted;
-  double yValDistorted;
-  double zValDistorted;
+  float xVal;
+  float yVal;
+  float zVal;
+  float xValDistorted;
+  float yValDistorted;
+  float zValDistorted;
   int xCalibLowIndex;
   int xCalibHighIndex;
   int yCalibLowIndex;
@@ -2575,8 +2477,12 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
     yCalibHighIndex = TMath::Ceil((yValDistorted/Ly)*nCalibDivisions_y);
     zCalibLowIndex = TMath::Floor((zValDistorted/Lz)*nCalibDivisions_z);
     zCalibHighIndex = TMath::Ceil((zValDistorted/Lz)*nCalibDivisions_z);
+           
+    xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((double) xCalibLowIndex);
+    yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((double) yCalibLowIndex);
+    zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((double) zCalibLowIndex);
     
-    if(xValDistorted < 0.0) {
+     if(xValDistorted < 0.0) {
       xCalibLowIndex = 0;
       xCalibHighIndex = 1;
       xCalibFrac = 0.0;
@@ -2609,42 +2515,46 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
       zCalibFrac = 1.0;
     }
     
-    xCalibFrac = ((xValDistorted/Lx)*nCalibDivisions_x)-((double) xCalibLowIndex);
-    yCalibFrac = ((yValDistorted/Ly)*nCalibDivisions_y)-((double) yCalibLowIndex);
-    zCalibFrac = ((zValDistorted/Lz)*nCalibDivisions_z)-((double) zCalibLowIndex);
-    
     distortionVoxel *vox;
+    
+    std::pair<double, float> weightVal;
     
     //TOP
     if (whichFace == 0) {
       tempFactor = (1.0-xCalibFrac)*(1.0-zCalibFrac);
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
 
       tempFactor = (1.0-xCalibFrac)*zCalibFrac;
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);      
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);    
       
 
       tempFactor = xCalibFrac*(1.0-zCalibFrac);
@@ -2652,32 +2562,38 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
         tempFactor = 0.0;
       
       vox = deltaXMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*zCalibFrac;
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
 	
       vox = deltaXMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, nCalibDivisions_y, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
     }
     
     //BOTTOM
@@ -2685,62 +2601,74 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
       tempFactor = (1.0-xCalibFrac)*(1.0-zCalibFrac);
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = (1.0-xCalibFrac)*zCalibFrac;
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*(1.0-zCalibFrac);
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
       
       vox = deltaXMap.getVoxel(xCalibHighIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, 0, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*zCalibFrac;
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
       
       vox = deltaXMap.getVoxel(xCalibHighIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, 0, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
     }
     
     //UPSTREAM
@@ -2748,62 +2676,74 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
       tempFactor = (1.0-xCalibFrac)*(1.0-yCalibFrac);
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = (1.0-xCalibFrac)*yCalibFrac;
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*(1.0-yCalibFrac);
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
 	
       vox = deltaXMap.getVoxel(xCalibHighIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, yCalibLowIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*yCalibFrac;
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
       
       vox = deltaXMap.getVoxel(xCalibHighIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, yCalibHighIndex, 0);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
     }
     
     //DOWNSTREAM
@@ -2811,62 +2751,74 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
       tempFactor = (1.0-xCalibFrac)*(1.0-yCalibFrac);
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = (1.0-xCalibFrac)*yCalibFrac;
       
       vox = deltaXMap.getVoxel(xCalibLowIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibLowIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibLowIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*(1.0-yCalibFrac);
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
 	
       vox = deltaXMap.getVoxel(xCalibHighIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, yCalibLowIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = xCalibFrac*yCalibFrac;
       if(xCalibHighIndex == nCalibDivisions_x)
         tempFactor = 0.0;
       
       vox = deltaXMap.getVoxel(xCalibHighIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(xCalibHighIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(xCalibHighIndex, yCalibHighIndex, nCalibDivisions_z);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
     }
     
     //CATHODE
@@ -2874,62 +2826,74 @@ std::vector<distortionMap> SCECalib::doCalibFaces(const std::vector<calibTrackIn
       tempFactor = (1.0-yCalibFrac)*(1.0-zCalibFrac);
       
       vox = deltaXMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = (1.0-yCalibFrac)*zCalibFrac;
       
       vox = deltaXMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(nCalibDivisions_x, yCalibLowIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = yCalibFrac*(1.0-zCalibFrac);
       
       vox = deltaXMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibLowIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
 
       tempFactor = yCalibFrac*zCalibFrac;
       
       vox = deltaXMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(xVal-xValDistorted);
+      weightVal = setSign(tempFactor, (xVal-xValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaYMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(yVal-yValDistorted);
+      weightVal = setSign(tempFactor, (yVal-yValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
       
       vox = deltaZMap.getVoxel(nCalibDivisions_x, yCalibHighIndex, zCalibHighIndex);
-      vox->addWeight(tempFactor);
-      vox->addDistortion(zVal-zValDistorted);
+      weightVal = setSign(tempFactor, (zVal-zValDistorted) );
+      vox->addWeight(weightVal.first);
+      vox->addDistortion(weightVal.second);
     }
 
-    if (whichFace >= 0) {
-      std::cout << "  " << whichFace << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << std::endl;
+    if (whichFace == 0) {
+      std::cout << "  " << whichFace << " " << xVal << " " << yVal << " " << zVal << " " << xValDistorted << " " << yValDistorted << " " << zValDistorted << " " << (xVal - xValDistorted) << " " << (yVal - yValDistorted) << " " << (zVal - zValDistorted) << " " << tempFactor << std::endl;
     }
   }    
   
@@ -3441,7 +3405,7 @@ int main(int argc, char *argv[]){
   for(int x = 0; x <= divisions[0]; x++)
   {
     x_reco += limits[0]/divisions[0];
-    y_reco = -1.0*limits[2]/divisions[1];
+    y_reco = -1.0*limits[1]/divisions[1];
   
     for(int y = 0; y <= divisions[1]; y++)
     {
@@ -3472,7 +3436,7 @@ int main(int argc, char *argv[]){
   y_reco = -1.0*limits[1]/divisions[1];
   for(int y = 0; y <= divisions[1]; y++)
   {    
-    y_reco = limits[1]/divisions[1];
+    y_reco += limits[1]/divisions[1];
     z_reco = -1.0*limits[2]/divisions[2];
   
     for(int z = 0; z <= divisions[2]; z++)

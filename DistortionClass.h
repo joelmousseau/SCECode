@@ -365,7 +365,10 @@ class SCECalib{
      
      double getTruthOffset(std::vector<double> sVec, axisType comp, bool isFwd = false);
                
-     void loadTruthMap(bool isFwd = false);          
+     void loadTruthMap(bool isFwd = false);
+     
+     //! Ensure the distortion carries the sign and not the weight
+     std::pair<double, float> setSign(double weight, float dist) const;          
      
      int cosmicTruthMode;          
      
