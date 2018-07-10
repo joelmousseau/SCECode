@@ -2,7 +2,7 @@ CXXFLAGS += -I. $(shell root-config --cflags) -g
 CXXFLAGS += -I. Eigen/Dense.h
 LDFLAGS += $(shell root-config --libs) -lPhysics -lMatrix -g
 
-PROGRAMS = DistortionClass CalibSCE
+PROGRAMS = DistortionClass CalibSCE CalcEField
 
 all:		clean $(PROGRAMS)
 
