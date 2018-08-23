@@ -44,8 +44,41 @@
 #include <TProfile2D.h>
 #include <TRandom3.h>
 
-std::vector<double> cosmicToLaser(std::vector<double> inputVec);
+class eFieldCalculator{
 
-std::vector<double> laserToCosmic(std::vector<double> inputVec);
+  public:
+     
+     eFieldCalculator() {}
+     
+     ~eFieldCalculator(){}
+     
+     std::vector<double> cosmicToLaser(std::vector<double> inputVec);
+
+     std::vector<double> laserToCosmic(std::vector<double> inputVec);
+
+     std::vector<double> voxToCosmic(std::vector<int> vox);
+
+     std::vector<int> cosmicToVox(std::vector<double> point);
+     
+     void compareCalib();
+
+  private:
+
+     const int nCalibDivisions_x = 25;
+     const int nCalibDivisions_y = 25;
+     const int nCalibDivisions_z = 100;
+     
+     const double Lx = 2.5;
+     const double Ly = 2.5;
+     const double Lz = 10.0;
+     
+     const double TPC_X = 256.04;
+     const double TPC_Y = 232.50;
+     const double TPC_Z = 1036.8;
+
+
+
+
+};
 
 #endif /* CalcEField_h */
