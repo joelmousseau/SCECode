@@ -45,6 +45,9 @@
 #include <TRandom3.h>
 #include <TError.h>
 
+
+#include "Math/Minimizer.h"
+
 #include "DistortionClass.h"
 
 struct Point {
@@ -104,16 +107,24 @@ class eFieldCalculator{
      double getAngle(std::vector<double> vecOne, std::vector<double> vecTwo);
      
      void  drawPlanarPlot(TH2F hist, int planeNum, const char *label, const char *filename, axisType axis, double zMax = 0.0);
+    
+    void  drawPlanarPlot(TH2F *hist, int planeNum, const char *label, const char *filename, axisType axis, double zMax = 0.0);
+    
+    void  draw1DPlot(TH1F *histOne, TH1F *histTwo, int planeNum, const char *label, const char *filename, axisType axis, double zMax = 0.0);
      
-     void combineMaps(bool isData = false);
+     void combineMaps(bool isData = false, bool skipLaser = true);
     
     void  compareFaces(bool isData = false);
     
     float LinInterp(float x, float x1, float x2, float q00, float q01);
     
     float TrilinInterp(float x, float y, float z, float q000, float q001, float q010, float q011, float q100, float q101, float q110, float q111, float x1, float x2, float y1, float y2, float z1, float z2);
+    
+    float calcChi2(double *scale, double *vals);
+    
+    void compareMeans();
 
-    void studyResults2();
+    void studyResults2(bool skipLaser = true);
     
   private:
 
