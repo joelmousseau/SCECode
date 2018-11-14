@@ -44,11 +44,24 @@
 #include <TProfile2D.h>
 #include <TRandom3.h>
 #include <TError.h>
+#include "TROOT.h"
+#include <TChain.h>
 
+#include "TBranch.h"
+#include "TGraph.h"
+#include "TVector3.h"
+#include "TInterpreter.h"
+#include "TLatex.h"
+#include "math.h"
+#include "vector"
 
 #include "Math/Minimizer.h"
+#include "Math/Factory.h"
+#include "Math/Functor.h"
 
 #include "DistortionClass.h"
+
+double calcChi2(const double *vals);
 
 struct Point {
     float x;
@@ -75,6 +88,18 @@ class eFieldCalculator{
      eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = true;}
      
      ~eFieldCalculator(){}
+    
+     double doCoordTransformX(const Double_t inputX);
+    
+     double doCoordTransformY(const Double_t inputY);
+    
+     double doCoordTransformZ(const Double_t inputZ);
+    
+    double doInvCoordTransformX(const Double_t inputX);
+    
+     double doInvCoordTransformY(const Double_t inputY);
+    
+     double doInvCoordTransformZ(const Double_t inputZ);
      
      bool goodLaser(double value, double error){return (value < 1000.0 && error > 0.0 && isRelErrorSmall(value, error));}
      
@@ -112,19 +137,24 @@ class eFieldCalculator{
     
     void  draw1DPlot(TH1F *histOne, TH1F *histTwo, int planeNum, const char *label, const char *filename, axisType axis, double zMax = 0.0);
      
-     void combineMaps(bool isData = false, bool skipLaser = true);
+    void combineMaps(bool isData = false, bool skipLaser = true, bool skipCosmic = true);
     
     void  compareFaces(bool isData = false);
+    
+    void combineWeightedMaps();
     
     float LinInterp(float x, float x1, float x2, float q00, float q01);
     
     float TrilinInterp(float x, float y, float z, float q000, float q001, float q010, float q011, float q100, float q101, float q110, float q111, float x1, float x2, float y1, float y2, float z1, float z2);
     
-    float calcChi2(double *scale, double *vals);
+    
+    void doFits();
     
     void compareMeans();
 
     void studyResults2(bool skipLaser = true);
+    
+    void Residual_afterTrackCorr(bool doTriLin = false);
     
   private:
 

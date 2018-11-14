@@ -17,6 +17,78 @@
 #include "CalcEField.h"
 
 
+
+double calcChi2(const double *vals){
+   
+    const Double_t x = vals[0];
+    double weight = 1 - x;
+    double cosmicVal = vals[1];
+    double laserVal  = vals[2];
+    double truthVal  = vals[3];
+    double cosmicErr = vals[4];
+    double laserErr  = vals[5];
+    //std::cout << weight << " " << x << std::endl;
+    float numerator = pow( ( ( ( (x/cosmicErr)*cosmicVal+(weight/laserErr)*laserVal)/( (1/cosmicErr) + (1/laserErr) ) )- truthVal),2);
+    float denominator = pow(truthVal, 2);
+    //std::cout << numerator << " " << denominator << std::endl;
+    //float numerator = pow((x+y),2);
+    //float denominator = 1.0;
+    
+    if(denominator > 0.0)
+        return numerator/denominator;
+    else
+        return 0.0;
+    
+}
+
+double eFieldCalculator::doCoordTransformX(const Double_t inputX)
+{
+    Double_t outputX;
+    outputX = Lx - (Lx/2.56)*inputX/100.0;
+    
+    return outputX;
+}
+
+double eFieldCalculator::doCoordTransformY(const Double_t inputY)
+{
+    Double_t outputY;
+    outputY = (Ly/2.33)*(inputY+116.5)/100.0;
+    
+    return outputY;
+}
+
+double eFieldCalculator::doCoordTransformZ(const Double_t inputZ)
+{
+    Double_t outputZ;
+    outputZ = (Lz/10.37)*(inputZ)/100.0;
+    
+    return outputZ;
+}
+
+double eFieldCalculator::doInvCoordTransformX(const Double_t inputX)
+{
+    Double_t outputX;
+    outputX = 100.0*(2.56/Lx)*(Lx - inputX);
+    
+    return outputX;
+}
+
+double eFieldCalculator::doInvCoordTransformY(const Double_t inputY)
+{
+    Double_t outputY;
+    outputY = 100.0*(2.33/Ly)*inputY - 116.5;
+    
+    return outputY;
+}
+
+double eFieldCalculator::doInvCoordTransformZ(const Double_t inputZ)
+{
+    Double_t outputZ;
+    outputZ = 100.0*(10.37/Lz)*inputZ;
+    
+    return outputZ;
+}
+
 void eFieldCalculator::compareCalib(bool isData)
 {
   
@@ -79,7 +151,14 @@ void eFieldCalculator::compareCalib(bool isData)
   TH3F* good_dZ = new TH3F("good_dZ","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
   
   TH3F* cosine_angles  = new TH3F("cosine_angles","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+  TH3F* magnitude_cosmic  = new TH3F("magnitude_cosmic","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
   
+  TH3F* magnitude_laser  = new TH3F("magnitude_laser","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+  TH3F* magnitude_diff  = new TH3F("magnitude_diff","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+
+    
   bool plotX = false;
   bool plotY = false;
   bool plotZ = false;
@@ -107,7 +186,7 @@ void eFieldCalculator::compareCalib(bool isData)
 	  std::cout << i*diff_dX->GetXaxis()->GetBinWidth(i) << std::endl;*/
 	//x_correction = 0.0;
 	
-	cosmic_Ds.push_back(cosmic_dX->GetBinContent(i,j,k)+x_correction);
+	cosmic_Ds.push_back(cosmic_dX->GetBinContent(i,j,k)-x_correction);
 	cosmic_Ds.push_back(cosmic_dY->GetBinContent(i,j,k));
 	cosmic_Ds.push_back(cosmic_dZ->GetBinContent(i,j,k));
 	
@@ -115,8 +194,16 @@ void eFieldCalculator::compareCalib(bool isData)
 	laser_Ds.push_back(laser_dY->GetBinContent(i,j,k));
 	laser_Ds.push_back(laser_dZ->GetBinContent(i,j,k));
 	
-	double cosine = getAngle(cosmic_Ds, laser_Ds);
-			
+	double cosine    = getAngle(cosmic_Ds, laser_Ds);
+    double laserMag  = getVectorMagnitude(laser_Ds);
+    double cosmicMag = getVectorMagnitude(cosmic_Ds);
+    double magDiff   = laserMag - cosmicMag;
+    if(goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)))
+          magnitude_laser->SetBinContent(i,j,k,laserMag);
+	
+    if(goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k)) )
+          magnitude_cosmic->SetBinContent(i,j,k,cosmicMag);
+          
 	if(plotX)
 	{
           diff_dX->SetBinContent(i,j,k,(laser_dX->GetBinContent(i,j,k)-cosmic_dX->GetBinContent(i,j,k)+x_correction) );
@@ -134,7 +221,10 @@ void eFieldCalculator::compareCalib(bool isData)
 	
 	if(plotX && plotY && plotZ){
 	  cosine_angles->SetBinContent(i,j,k,cosine);
-	  //std::cout << cosine << std::endl;
+      
+	  
+      magnitude_diff->SetBinContent(i,j,k,magDiff);
+        //std::cout << cosine << std::endl;
 	}  
       }
     }
@@ -171,7 +261,10 @@ void eFieldCalculator::compareCalib(bool isData)
     TH2F diff_2D_dY(Form("diff_2D_dY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
     TH2F diff_2D_dZ(Form("diff_2D_dZ_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
     
-    TH2F cosine_2D(Form("cosine_2D_%d", k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax); 
+    TH2F cosine_2D(Form("cosine_2D_%d", k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+    TH2F magnitude_cosmic_2D(Form("magnitude_cosmic_2D_%d", k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+    TH2F magnitude_laser_2D(Form("magnitude_laser_2D_%d", k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+    TH2F magnitude_diff_2D(Form("magnitude_diff_2D_%d", k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
  
     if( k < zCuts[0])
       zRegion = 0;
@@ -191,7 +284,12 @@ void eFieldCalculator::compareCalib(bool isData)
 	plotX = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)) );
 	plotY = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k)) );
 	plotZ = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k)) );
-	
+    
+    if(goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) )
+              magnitude_laser_2D.SetBinContent(i,j, magnitude_laser->GetBinContent(i,j,k));
+          
+    if(goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k)) )
+              magnitude_cosmic_2D.SetBinContent(i,j, magnitude_cosmic->GetBinContent(i,j,k));
 	
 	if(plotX){	
 	  laser_2D_dX.SetBinContent(i,j,laser_dX->GetBinContent(i,j,k));
@@ -223,11 +321,14 @@ void eFieldCalculator::compareCalib(bool isData)
 	
 	if(plotX && plotY && plotZ){
 	   cosine_2D.SetBinContent(i,j, cosine_angles->GetBinContent(i,j,k));
-	}  
+       magnitude_diff_2D.SetBinContent(i,j, magnitude_diff->GetBinContent(i,j,k));
+        
+    }
 	
         diff_2D_dX.SetBinContent(i,j,diff_dX->GetBinContent(i,j,k));
         diff_2D_dY.SetBinContent(i,j,diff_dY->GetBinContent(i,j,k));
         diff_2D_dZ.SetBinContent(i,j,diff_dZ->GetBinContent(i,j,k));
+          
 	  
       }
     }
@@ -244,6 +345,9 @@ void eFieldCalculator::compareCalib(bool isData)
    drawPlanarPlot(diff_2D_dY, k, "Laser-Cosmic #DeltaY", "diff_2D_dY", axisType::zAxis, zMaximum);
    drawPlanarPlot(diff_2D_dZ, k, "Laser-Cosmic #DeltaZ", "diff_2D_dZ", axisType::zAxis, zMaximum);
    drawPlanarPlot(cosine_2D,  k, "Cosine of Laser - Cosmic", "cos_2D", axisType::zAxis, 1.0);
+   drawPlanarPlot(magnitude_cosmic_2D,  k, "Magnitude of Cosmic Deflection", "cosmic_2D_mag", axisType::zAxis, 10.0);
+   drawPlanarPlot(magnitude_laser_2D,  k, "Magnitude of Laser Deflection", "laser_2D_mag", axisType::zAxis, 10.0);
+   drawPlanarPlot(magnitude_diff_2D,  k, "Differece in Magnitude", "diff_2D_mag", axisType::zAxis, 8.0);
       
    
 
@@ -299,7 +403,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffXByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dX.SaveAs("plotdump/diff_1D_dX.png");
+  c_1D_diff_dX.SaveAs("1D_plots/diff_1D_dX.png");
   
   maximum = -999.9;
   h_diffYByRegion[0]->Scale( TPC_Z / zOne);
@@ -334,7 +438,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffYByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dY.SaveAs("plotdump/diff_1D_dY.png");
+  c_1D_diff_dY.SaveAs("1D_plots/diff_1D_dY.png");
   
   maximum = -999.9;
   h_diffZByRegion[0]->Scale( TPC_Z / zOne);
@@ -369,7 +473,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffZByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dZ.SaveAs("plotdump/diff_1D_dZ.png");
+  c_1D_diff_dZ.SaveAs("1D_plots/diff_1D_dZ.png");
   
   TCanvas c_1D_goodVoxels_dX("c_godVoxels_dX", "", 1300, 900);
   c_1D_goodVoxels_dX.cd();
@@ -467,6 +571,12 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
   TH3F* diff_dZ = new TH3F("diff_dZ","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
     
   TH3F* cosine_angles  = new TH3F("cosine_angles","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH3F* magnitude_cosmic  = new TH3F("magnitude_cosmic","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH3F* magnitude_laser  = new TH3F("magnitude_laser","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH3F* magnitude_diff  = new TH3F("magnitude_diff","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
   
   bool plotX = false;
   bool plotY = false;
@@ -493,7 +603,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
 	  std::cout << i*diff_dX->GetXaxis()->GetBinWidth(i) << std::endl;*/
 	//x_correction = 0.0;
     
-     cosmic_Ds.push_back(cosmic_dX->GetBinContent(i,j,k)+x_correction);
+     cosmic_Ds.push_back(cosmic_dX->GetBinContent(i,j,k)-x_correction);
      cosmic_Ds.push_back(cosmic_dY->GetBinContent(i,j,k));
      cosmic_Ds.push_back(cosmic_dZ->GetBinContent(i,j,k));
           
@@ -501,7 +611,19 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
      laser_Ds.push_back(laser_dY->GetBinContent(i,j,k));
      laser_Ds.push_back(laser_dZ->GetBinContent(i,j,k));
           
-          double cosine = getAngle(cosmic_Ds, laser_Ds);
+     double cosine    = getAngle(cosmic_Ds, laser_Ds);
+     double laserMag  = getVectorMagnitude(laser_Ds);
+     double cosmicMag = getVectorMagnitude(cosmic_Ds);
+     double magDiff   = laserMag - cosmicMag;
+     
+     if(goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) ){
+              magnitude_laser->SetBinContent(i,j,k,laserMag);
+         
+     }
+          
+     if(goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k)) )
+             magnitude_cosmic->SetBinContent(i,j,k,cosmicMag);
+          
 			
 	if(plotX)
 	{
@@ -519,7 +641,9 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
 	}
    
     if(plotX && plotY && plotZ){
+      
       cosine_angles->SetBinContent(i,j,k,cosine);
+      magnitude_diff->SetBinContent(i,j,k,magDiff);
        
           }
           
@@ -559,6 +683,9 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
     TH2F diff_2D_dZ(Form("diff_2D_dZ_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
     
     TH2F cosine_2D(Form("cosine_2D_%d", k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+    TH2F magnitude_cosmic_2D(Form("magnitude_cosmic_2D_%d", k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+    TH2F magnitude_laser_2D(Form("magnitude_laser_2D_%d", k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+    TH2F magnitude_diff_2D(Form("magnitude_diff_2D_%d", k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
  
     if( k < zCuts[0])
       zRegion = 0;
@@ -580,6 +707,14 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
 	plotX = (goodLaser(laser_dX->GetBinContent(i,k,j), laser_dX_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dX->GetBinContent(i,k,j), cosmic_dX_err->GetBinContent(i,k,j)) );
 	plotY = (goodLaser(laser_dY->GetBinContent(i,k,j), laser_dY_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dY->GetBinContent(i,k,j), cosmic_dY_err->GetBinContent(i,k,j)) );
 	plotZ = (goodLaser(laser_dZ->GetBinContent(i,k,j), laser_dZ_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dZ->GetBinContent(i,k,j), cosmic_dZ_err->GetBinContent(i,k,j)) );
+    
+          if(goodLaser(laser_dX->GetBinContent(i,k,j), laser_dX_err->GetBinContent(i,k,j)) && goodLaser(laser_dY->GetBinContent(i,k,j), laser_dY_err->GetBinContent(i,k,j)) && goodLaser(laser_dZ->GetBinContent(i,k,j), laser_dZ_err->GetBinContent(i,k,j)) ){
+              magnitude_laser_2D.SetBinContent(j,i, magnitude_laser->GetBinContent(i,k,j));
+              if(k == 1 && i == 3)
+                  magnitude_laser_2D.SetBinContent(j,i, -5.0);
+          }
+    if(goodCosmic(cosmic_dX->GetBinContent(i,k,j), cosmic_dX_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dY->GetBinContent(i,k,j), cosmic_dY_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dZ->GetBinContent(i,k,j), cosmic_dZ_err->GetBinContent(i,k,j)) )
+              magnitude_cosmic_2D.SetBinContent(j,i, magnitude_cosmic->GetBinContent(i,k,j));
 	
 	
 	if(plotX){	
@@ -608,6 +743,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
           
     if(plotX && plotY && plotZ){
        cosine_2D.SetBinContent(j,i,cosine_angles->GetBinContent(i,k,j));
+       magnitude_diff_2D.SetBinContent(j,i, magnitude_diff->GetBinContent(i,k,j));
     }
 		  
       }
@@ -616,13 +752,16 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
     drawPlanarPlot(laser_2D_dX, k, "Laser #DeltaX", "laser_2D_dX", axisType::yAxis);
     drawPlanarPlot(laser_2D_dY, k, "Laser #DeltaY", "laser_2D_dY", axisType::yAxis);
     drawPlanarPlot(laser_2D_dZ, k, "Laser #DeltaZ", "laser_2D_dZ", axisType::yAxis);
-    drawPlanarPlot(cosmic_2D_dX, k, "Cosmic #DeltaX", "laser_2D_dX", axisType::yAxis);
-    drawPlanarPlot(cosmic_2D_dY, k, "Cosmic #DeltaY", "laser_2D_dY", axisType::yAxis);
-    drawPlanarPlot(cosmic_2D_dZ, k, "Cosmic #DeltaZ", "laser_2D_dZ", axisType::yAxis);
+    drawPlanarPlot(cosmic_2D_dX, k, "Cosmic #DeltaX", "cosmic_2D_dX", axisType::yAxis);
+    drawPlanarPlot(cosmic_2D_dY, k, "Cosmic #DeltaY", "cosmic_2D_dY", axisType::yAxis);
+    drawPlanarPlot(cosmic_2D_dZ, k, "Cosmic #DeltaZ", "cosmic_2D_dZ", axisType::yAxis);
     drawPlanarPlot(diff_2D_dX, k, "Laser-Cosmic #DeltaX", "diff_2D_dX", axisType::yAxis, zMaximum);
     drawPlanarPlot(diff_2D_dY, k, "Laser-Cosmic #DeltaY", "diff_2D_dY", axisType::yAxis, zMaximum);
     drawPlanarPlot(diff_2D_dZ, k, "Laser-Cosmic #DeltaZ", "diff_2D_dZ", axisType::yAxis, zMaximum);
     drawPlanarPlot(cosine_2D,  k, "Cosine of Laser - Cosmic", "cos_2D", axisType::yAxis, 1.0);
+    drawPlanarPlot(magnitude_cosmic_2D,  k, "Magnitude of Cosmic Deflection", "cosmic_2D_mag", axisType::yAxis, 10.0);
+    drawPlanarPlot(magnitude_laser_2D,  k, "Magnitude of Laser Deflection", "laser_2D_mag", axisType::yAxis, 10.0);
+    drawPlanarPlot(magnitude_diff_2D,  k, "Differnce in Magnitude", "diff_2D_mag", axisType::yAxis, 10.0);
     
   }
   double zOne = (((double) zCuts[0] - 1)/25.0)*TPC_Y;
@@ -665,7 +804,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffXByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dX.SaveAs("plotdump/diff_1D_dX.png");
+  c_1D_diff_dX.SaveAs("1D_plots/diff_1D_dX.png");
   
   maximum = -999.9;
   h_diffYByRegion[0]->Scale( TPC_Y / zOne);
@@ -700,7 +839,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffYByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dY.SaveAs("plotdump/diff_1D_dY.png");
+  c_1D_diff_dY.SaveAs("1D_plots/diff_1D_dY.png");
   
   maximum = -999.9;
   h_diffZByRegion[0]->Scale( TPC_Y / zOne);
@@ -735,7 +874,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffZByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dZ.SaveAs("plotdump/diff_1D_dZ.png");   
+  c_1D_diff_dZ.SaveAs("1D_plots/diff_1D_dZ.png");
   
 }
 
@@ -766,14 +905,15 @@ void eFieldCalculator::compareTruth(bool sigmaDiff)
   TH3F* laser_dZ_err = (TH3F*) fileLaser->Get("Reco_Displacement_Z_Error");
   
     //Fix this at a later data
- /* TFile* fileCosmic = new TFile("output_hists_MC_200k_Aug3.root");
+  TFile* fileCosmic = new TFile("output_hists_MC_200k_Aug3.root");
   TH3F* cosmic_dX = (TH3F*) fileCosmic->Get("Reco_Displacement_X");
   TH3F* cosmic_dY = (TH3F*) fileCosmic->Get("Reco_Displacement_Y");
   TH3F* cosmic_dZ = (TH3F*) fileCosmic->Get("Reco_Displacement_Z");
   TH3F* cosmic_dX_err = (TH3F*) fileCosmic->Get("Reco_Displacement_X_Error");
   TH3F* cosmic_dY_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Y_Error");
-  TH3F* cosmic_dZ_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Z_Error");*/
-    
+  TH3F* cosmic_dZ_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Z_Error");
+  
+    /*
   TFile* fileCosmic = new TFile("MergedMaps.root");
   TH3F* cosmic_dX = (TH3F*) fileCosmic->Get("combined_dX");
   TH3F* cosmic_dY = (TH3F*) fileCosmic->Get("combined_dY");
@@ -781,7 +921,7 @@ void eFieldCalculator::compareTruth(bool sigmaDiff)
   TH3F* cosmic_dX_err = (TH3F*) fileCosmic->Get("combined_dX_Error");
   TH3F* cosmic_dY_err = (TH3F*) fileCosmic->Get("combined_dY_Error");
   TH3F* cosmic_dZ_err = (TH3F*) fileCosmic->Get("combined_dZ_Error");
-    
+    */
     
   
   TFile* fileTruth = new TFile("output_truth_hists.root");
@@ -941,104 +1081,83 @@ void eFieldCalculator::compareTruth(bool sigmaDiff)
       }
     }
 
-    TCanvas c_laser_dX(Form("canv_2D_dX_%d",k),"",600,600);
-    c_laser_dX.cd();
-    laser_2D_dX.SetTitle(Form("Laser - Truth #DeltaX [cm]:  ^{}Z_{reco} = %.2f cm",(((double) k-1)/100.0)*1036.8));
-    laser_2D_dX.GetXaxis()->SetTitle("X_{reco} [cm]");
-    laser_2D_dX.GetXaxis()->SetTitleOffset(1.0);
-    laser_2D_dX.GetXaxis()->SetTitleSize(0.04);
-    laser_2D_dX.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    laser_2D_dX.GetYaxis()->SetTitleOffset(1.2);
-    laser_2D_dX.GetYaxis()->SetTitleSize(0.04);
-    laser_2D_dX.GetZaxis()->SetNoExponent(kTRUE);
-    laser_2D_dX.GetZaxis()->SetLabelSize(0.025);
-    laser_2D_dX.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    laser_2D_dX.SetStats(0);
-    laser_2D_dX.Draw("COLZ");
-    c_laser_dX.SaveAs(Form("Truth_plots/laser_2D_dX_%d.png",k));
-
-    TCanvas c_laser_dY(Form("canv_2D_dY_%d",k),"",600,600);
-    c_laser_dY.cd();
-    laser_2D_dY.SetTitle(Form("Laser - Truth #DeltaY [cm]:  ^{}Z_{reco} = %.2f cm",(((double) k-1)/100.0)*1036.8));
-    laser_2D_dY.GetXaxis()->SetTitle("X_{reco} [cm]");
-    laser_2D_dY.GetXaxis()->SetTitleOffset(1.0);
-    laser_2D_dY.GetXaxis()->SetTitleSize(0.04);
-    laser_2D_dY.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    laser_2D_dY.GetYaxis()->SetTitleOffset(1.2);
-    laser_2D_dY.GetYaxis()->SetTitleSize(0.04);
-    laser_2D_dY.GetZaxis()->SetNoExponent(kTRUE);
-    laser_2D_dY.GetZaxis()->SetLabelSize(0.025);
-    laser_2D_dY.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    laser_2D_dY.SetStats(0);
-    laser_2D_dY.Draw("COLZ");
-    c_laser_dY.SaveAs(Form("Truth_plots/laser_2D_dY_%d.png",k));
-    
-    TCanvas c_laser_dZ(Form("canv_2D_dZ_%d",k),"",600,600);
-    c_laser_dZ.cd();
-    laser_2D_dZ.SetTitle(Form("Laser - Truth #DeltaZ [cm]:  ^{}Z_{reco} = %.2f cm",(((double) k-1)/100.0)*1036.8));
-    laser_2D_dZ.GetXaxis()->SetTitle("X_{reco} [cm]");
-    laser_2D_dZ.GetXaxis()->SetTitleOffset(1.0);
-    laser_2D_dZ.GetXaxis()->SetTitleSize(0.04);
-    laser_2D_dZ.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    laser_2D_dZ.GetYaxis()->SetTitleOffset(1.2);
-    laser_2D_dZ.GetYaxis()->SetTitleSize(0.04);
-    laser_2D_dZ.GetZaxis()->SetNoExponent(kTRUE);
-    laser_2D_dZ.GetZaxis()->SetLabelSize(0.025);
-    laser_2D_dZ.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    laser_2D_dZ.SetStats(0);
-    laser_2D_dZ.Draw("COLZ");
-    c_laser_dZ.SaveAs(Form("Truth_plots/laser_2D_dZ_%d.png",k));
-
-    TCanvas c_cosmic_dX(Form("canv_2D_dX_%d",k),"",600,600);
-    c_cosmic_dX.cd();
-    cosmic_2D_dX.SetTitle(Form("Cosmic - Truth #DeltaX [cm]:  ^{}Z_{reco} = %.2f cm",(((Double_t) k-1)/100.0)*1036.8));
-    cosmic_2D_dX.GetXaxis()->SetTitle("X_{reco} [cm]");
-    cosmic_2D_dX.GetXaxis()->SetTitleOffset(1.0);
-    cosmic_2D_dX.GetXaxis()->SetTitleSize(0.04);
-    cosmic_2D_dX.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    cosmic_2D_dX.GetYaxis()->SetTitleOffset(1.2);
-    cosmic_2D_dX.GetYaxis()->SetTitleSize(0.04);
-    cosmic_2D_dX.GetZaxis()->SetNoExponent(kTRUE);
-    cosmic_2D_dX.GetZaxis()->SetLabelSize(0.025);
-    cosmic_2D_dX.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    cosmic_2D_dX.SetStats(0);
-    cosmic_2D_dX.Draw("COLZ");
-    c_cosmic_dX.SaveAs(Form("Truth_plots/cosmic_2D_dX_%d.png",k));
-
-    TCanvas c_cosmic_dY(Form("canv_2D_dY_%d",k),"",600,600);
-    c_cosmic_dY.cd();
-    cosmic_2D_dY.SetTitle(Form("Cosmic - Truth #DeltaY [cm]:  ^{}Z_{reco} = %.2f cm",(((double) k-1)/100.0)*1036.8));
-    cosmic_2D_dY.GetXaxis()->SetTitle("X_{reco} [cm]");
-    cosmic_2D_dY.GetXaxis()->SetTitleOffset(1.0);
-    cosmic_2D_dY.GetXaxis()->SetTitleSize(0.04);
-    cosmic_2D_dY.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    cosmic_2D_dY.GetYaxis()->SetTitleOffset(1.2);
-    cosmic_2D_dY.GetYaxis()->SetTitleSize(0.04);
-    cosmic_2D_dY.GetZaxis()->SetNoExponent(kTRUE);
-    cosmic_2D_dY.GetZaxis()->SetLabelSize(0.025);
-    cosmic_2D_dY.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    cosmic_2D_dY.SetStats(0);
-    cosmic_2D_dY.Draw("COLZ");
-    c_cosmic_dY.SaveAs(Form("Truth_plots/cosmic_2D_dY_%d.png",k));
-    
-    TCanvas c_cosmic_dZ(Form("canv_2D_dZ_%d",k),"",600,600);
-    c_cosmic_dZ.cd();
-    cosmic_2D_dZ.SetTitle(Form("Cosmic - Truth #DeltaZ [cm]:  ^{}Z_{reco} = %.2f cm",(((double) k-1)/100.0)*1036.8));
-    cosmic_2D_dZ.GetXaxis()->SetTitle("X_{reco} [cm]");
-    cosmic_2D_dZ.GetXaxis()->SetTitleOffset(1.0);
-    cosmic_2D_dZ.GetXaxis()->SetTitleSize(0.04);
-    cosmic_2D_dZ.GetYaxis()->SetTitle("Y_{reco} [cm]");
-    cosmic_2D_dZ.GetYaxis()->SetTitleOffset(1.2);
-    cosmic_2D_dZ.GetYaxis()->SetTitleSize(0.04);
-    cosmic_2D_dZ.GetZaxis()->SetNoExponent(kTRUE);
-    cosmic_2D_dZ.GetZaxis()->SetLabelSize(0.025);
-    cosmic_2D_dZ.GetZaxis()->SetRangeUser(-zMaximum, zMaximum);
-    cosmic_2D_dZ.SetStats(0);
-    cosmic_2D_dZ.Draw("COLZ");
-    c_cosmic_dZ.SaveAs(Form("Truth_plots/cosmic_2D_dZ_%d.png",k));
+    drawPlanarPlot(laser_2D_dX, k, "Laser - Truth dX", "LaserTruth_dX", axisType::zAxis, 2.5);
+    drawPlanarPlot(laser_2D_dY, k, "Laser - Truth dY", "LaserTruth_dY", axisType::zAxis, 2.5);
+    drawPlanarPlot(laser_2D_dZ, k, "Laser - Truth dZ", "LaserTruth_dZ", axisType::zAxis, 2.5);
+      
+    drawPlanarPlot(cosmic_2D_dX, k, "Cosmic - Truth dX", "CosmicTruth_dX", axisType::zAxis, 2.5);
+    drawPlanarPlot(cosmic_2D_dY, k, "Cosmic - Truth dY", "CosmicTruth_dY", axisType::zAxis, 2.5);
+    drawPlanarPlot(cosmic_2D_dZ, k, "Cosmic - Truth dZ", "CosmicTruth_dZ", axisType::zAxis, 2.5);
 
     
   }
+    
+    for(Int_t k = 1; k <= diff_laser_dX->GetNbinsY(); k++)
+    {
+        TH2F laser_2D_dX(Form("laser_2D_dX_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F laser_2D_dY(Form("laser_2D_dY_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F laser_2D_dZ(Form("laser_2D_dZ_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        
+        TH2F cosmic_2D_dX(Form("cosmic_2D_dX_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F cosmic_2D_dY(Form("cosmic_2D_dY_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F cosmic_2D_dZ(Form("cosmic_2D_dZ_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        
+        /*
+        if( k < zCuts[0])
+            zRegion = 0;
+        else if( k >= zCuts[0] && k < zCuts[1])
+            zRegion = 1;
+        else if( k >= zCuts[1])
+            zRegion = 2;
+        else
+            std::cout << "Cannot determine zRegion" << std::endl;
+        */
+        
+        for(Int_t i = 1; i <= diff_laser_dX->GetNbinsX(); i++)
+        {
+            for(Int_t j = 1; j <= diff_laser_dX->GetNbinsZ(); j++)
+            {
+                
+                plotX = (goodLaser(laser_dX->GetBinContent(i,k,j), laser_dX_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dX->GetBinContent(i,k,j), cosmic_dX_err->GetBinContent(i,k,j)) );
+                plotY = (goodLaser(laser_dY->GetBinContent(i,k,j), laser_dY_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dY->GetBinContent(i,k,j), cosmic_dY_err->GetBinContent(i,k,j)) );
+                plotZ = (goodLaser(laser_dZ->GetBinContent(i,k,j), laser_dZ_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dZ->GetBinContent(i,k,j), cosmic_dZ_err->GetBinContent(i,k,j)) );
+                
+                
+                
+                if(plotX){
+                    laser_2D_dX.SetBinContent(j,i,diff_laser_dX->GetBinContent(i,k,j));
+                    cosmic_2D_dX.SetBinContent(j,i,diff_cosmic_dX->GetBinContent(i,k,j));
+                   
+                }
+                
+                if(plotY){
+                    
+                    laser_2D_dY.SetBinContent(j,i,diff_laser_dY->GetBinContent(i,k,j));
+                    cosmic_2D_dY.SetBinContent(j,i,diff_cosmic_dY->GetBinContent(i,k,j));
+                    
+                }
+                
+                if(plotZ){
+                    laser_2D_dZ.SetBinContent(j,i,diff_laser_dZ->GetBinContent(i,k,j));
+                    cosmic_2D_dZ.SetBinContent(k,i,diff_cosmic_dZ->GetBinContent(i,k,j));
+                    
+                    
+                }
+                
+            }
+        }
+        
+        drawPlanarPlot(laser_2D_dX, k, "Laser - Truth dX", "LaserTruth_dX", axisType::yAxis, 2.5);
+        drawPlanarPlot(laser_2D_dY, k, "Laser - Truth dY", "LaserTruth_dY", axisType::yAxis, 2.5);
+        drawPlanarPlot(laser_2D_dZ, k, "Laser - Truth dZ", "LaserTruth_dZ", axisType::yAxis, 2.5);
+        
+        drawPlanarPlot(cosmic_2D_dX, k, "Cosmic - Truth dX", "CosmicTruth_dX", axisType::yAxis, 2.5);
+        drawPlanarPlot(cosmic_2D_dY, k, "Cosmic - Truth dY", "CosmicTruth_dY", axisType::yAxis, 2.5);
+        drawPlanarPlot(cosmic_2D_dZ, k, "Cosmic - Truth dZ", "CosmicTruth_dZ", axisType::yAxis, 2.5);
+        
+        
+    }
+    
   double zOne = (((double) zCuts[0] - 1)/100.0)*TPC_Z;
   double zTwo = (((double) zCuts[1] - 1)/100.0)*TPC_Z;
   double maximum = -999.9;
@@ -1434,7 +1553,7 @@ void eFieldCalculator::drawPlanarPlot(TH2F hist, int planeNum, const char* label
       xAxisLabel = "Z_{reco} [cm]";
       yAxisLabel = "X_{reco} [cm]";
       dir        = "2DPlots_ZX";
-      sprintf(plotTitle, "%s [cm]:  ^{}Y_{reco} = %.2f cm", label,(((((double) planeNum-1)/25.0)*TPC_Y) - Ly/2.0) );
+      sprintf(plotTitle, "%s [cm]:  ^{}Y_{reco} = %.2f cm", label,(((((double) planeNum-1)/25.0)*TPC_Y) - TPC_Y/2.0) );
     }
     
     //YZ Plane
@@ -1488,7 +1607,7 @@ void eFieldCalculator::drawPlanarPlot(TH2F *hist, int planeNum, const char* labe
         xAxisLabel = "Z_{reco} [cm]";
         yAxisLabel = "X_{reco} [cm]";
         dir        = "2DPlots_ZX";
-        sprintf(plotTitle, "%s [cm]:  ^{}Y_{reco} = %.2f cm", label,(((((double) planeNum-1)/25.0)*TPC_Y) - Ly/2.0) );
+        sprintf(plotTitle, "%s [cm]:  ^{}Y_{reco} = %.2f cm", label,(((((double) planeNum-1)/25.0)*TPC_Y) - TPC_Y/2.0) );
     }
     
     //YZ Plane
@@ -1552,9 +1671,8 @@ void eFieldCalculator::draw1DPlot(TH1F *histOne, TH1F *histTwo, int planeNum, co
         sprintf(plotTitle, "%s  ^{}X_{reco} = %.2f cm", label, (double)(TPC_X*((25-planeNum)/25.0))/*(((((double) planeNum-1)/25.0)*TPC_X))*/);
     }
     
-    histOne->Scale(1.0/histOne->Integral());
-    std::cout << histOne->GetMaximum() << std::endl;
-    histTwo->Scale(1.0/histTwo->Integral());
+    //histOne->Scale(1.0/histOne->Integral());
+    //histTwo->Scale(1.0/histTwo->Integral());
     
     histOne->SetLineWidth(2.0);
     histOne->SetLineColor(kRed);
@@ -1610,6 +1728,10 @@ void eFieldCalculator::compareFaces(bool isData){
     int nZbins  = face_dY->GetNbinsY();
     int nXbins  = face_dY->GetNbinsX();
     int nYbins  = 0;
+    
+    double driftV = 0.0;
+    if(isData)
+        driftV = 0.01;
 
     
     TFile* fileLaser = new TFile(inputLaser.c_str());
@@ -1637,6 +1759,7 @@ void eFieldCalculator::compareFaces(bool isData){
             double zVal = face_dY->GetYaxis()->GetBinCenter(j);
             double laserVal  =  laser_dY->Interpolate(xVal,  105.0, zVal);
             double cosmicVal =  cosmic_dY->Interpolate(xVal, 105.0, zVal);
+            double faceVal = -1.0*face_dY->GetBinContent(i,j);
             
             //bool  plotLaser  =  goodLaser(laser_dY->GetBinContent(i,25,j), laser_dY_err->GetBinContent(i,25,j));
             //bool  plotCosmic =  goodCosmic(cosmic_dY->GetBinContent(i,25,j), cosmic_dY_err->GetBinContent(i,25,j));
@@ -1647,9 +1770,9 @@ void eFieldCalculator::compareFaces(bool isData){
               std::cout << laserVal << " " << cosmicVal << " " << fabs(face_dY->GetBinContent(i,j)) << std::endl;
             */
             if(plotLaser)
-              laser_2D_dY.SetBinContent(j,i,  (laserVal  - fabs(face_dY->GetBinContent(i,j) ) ) );
+              laser_2D_dY.SetBinContent(j,i,  (laserVal  - faceVal ) );
             if(plotCosmic)
-              cosmic_2D_dY.SetBinContent(j,i, (cosmicVal - fabs(face_dY->GetBinContent(i,j) ) ) );
+              cosmic_2D_dY.SetBinContent(j,i, (cosmicVal - faceVal ) );
             
             
             
@@ -1667,21 +1790,24 @@ void eFieldCalculator::compareFaces(bool isData){
             double zVal = face_dX->GetXaxis()->GetBinCenter(i);
             double yVal = face_dX->GetYaxis()->GetBinCenter(j);
             double xVal = 230.0;
+            double x_correction = driftV*xVal;
+            //double x_correction = 0.0;
             double laserVal  =   laser_dX->Interpolate(xVal, yVal, zVal);
-            double cosmicVal =  cosmic_dX->Interpolate(xVal, yVal, zVal);
+            double cosmicVal =   cosmic_dX->Interpolate(xVal, yVal, zVal) - x_correction;
+            double faceVal   =   -1.0*(face_dX->GetBinContent(i,j) + x_correction);
             
             //bool  plotLaser  =  goodLaser(laser_dY->GetBinContent(i,25,j), laser_dY_err->GetBinContent(i,25,j));
             //bool  plotCosmic =  goodCosmic(cosmic_dY->GetBinContent(i,25,j), cosmic_dY_err->GetBinContent(i,25,j));
             bool plotLaser  = true;
             bool plotCosmic = true;
             
-            if(plotLaser && plotCosmic && j == 24)
-                 std::cout << zVal << ", " << yVal << ": " <<  laserVal << " " << cosmicVal << " " <<  -1.0*face_dX->GetBinContent(i,j) << std::endl;
+            if(plotLaser && plotCosmic && j == 11)
+                 std::cout << zVal << ", " << yVal << ": " <<  laserVal << " " << cosmicVal << " " <<  faceVal << std::endl;
              
             if(plotLaser)
-               laser_2D_dX.SetBinContent(j,i,  (laserVal  - face_dX->GetBinContent(i,j) ) ) ;
+               laser_2D_dX.SetBinContent(j,i,  (laserVal  - faceVal ) ) ;
             if(plotCosmic)
-               cosmic_2D_dX.SetBinContent(j,i, (cosmicVal - face_dX->GetBinContent(i,j) ) ) ;
+               cosmic_2D_dX.SetBinContent(j,i, (cosmicVal - faceVal ) ) ;
             
             
             
@@ -1691,38 +1817,238 @@ void eFieldCalculator::compareFaces(bool isData){
     drawPlanarPlot(laser_2D_dY, 26, "Laser - Face #DeltaY (top)", "laser_2D_top_dY", axisType::yAxis, 6.0);
     drawPlanarPlot(cosmic_2D_dY, 26, "Cosmic - Face #DeltaY (top)", "cosmic_2D_top_dY", axisType::yAxis, 6.0);
     
-    drawPlanarPlot(laser_2D_dX, 26,  "Laser - Face #DeltaX (cathode)", "laser_2D_cathode_dX", axisType::xAxis, 15.0);
-    drawPlanarPlot(cosmic_2D_dX, 26, "Cosmic - Face #DeltaX (cathode)", "cosmic_2D_cathode_dX", axisType::xAxis, 5.0);
+    drawPlanarPlot(laser_2D_dX, 26,  "Laser - Face #DeltaX (cathode)", "laser_2D_cathode_dX", axisType::xAxis, 4.0);
+    drawPlanarPlot(cosmic_2D_dX, 26, "Cosmic - Face #DeltaX (cathode)", "cosmic_2D_cathode_dX", axisType::xAxis, 4.0);
 }
 
-void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
-  const int lowZ    = 21;
-  const int highZ   = 87;
+void eFieldCalculator::doFits(){
+    std::string inputLaser = "RecoCorr-N3-S50-LaserMC-2side-Anode.root";
+    std::string inputCosmic = "output_hists_MC_200k_Aug3.root";
+
+
+   TFile* fileLaser = new TFile(inputLaser.c_str());
+   TH3F* laser_dX = (TH3F*) fileLaser->Get("Reco_Displacement_X");
+   TH3F* laser_dY = (TH3F*) fileLaser->Get("Reco_Displacement_Y");
+   TH3F* laser_dZ = (TH3F*) fileLaser->Get("Reco_Displacement_Z");
+   TH3F* laser_dX_err = (TH3F*) fileLaser->Get("Reco_Displacement_X_Error");
+   TH3F* laser_dY_err = (TH3F*) fileLaser->Get("Reco_Displacement_Y_Error");
+   TH3F* laser_dZ_err = (TH3F*) fileLaser->Get("Reco_Displacement_Z_Error");
+
+   TFile* fileCosmic = new TFile(inputCosmic.c_str());
+   TH3F* cosmic_dX = (TH3F*) fileCosmic->Get("Reco_Displacement_X");
+   TH3F* cosmic_dY = (TH3F*) fileCosmic->Get("Reco_Displacement_Y");
+   TH3F* cosmic_dZ = (TH3F*) fileCosmic->Get("Reco_Displacement_Z");
+   TH3F* cosmic_dX_err = (TH3F*) fileCosmic->Get("Reco_Displacement_X_Error");
+   TH3F* cosmic_dY_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Y_Error");
+   TH3F* cosmic_dZ_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Z_Error");
+    
+   TFile* fileTruth = new TFile("output_truth_hists.root");
+   TH3F* truth_dX = (TH3F*) fileTruth->Get("True_Displacement_X");
+   TH3F* truth_dY = (TH3F*) fileTruth->Get("True_Displacement_Y");
+   TH3F* truth_dZ = (TH3F*) fileTruth->Get("True_Displacement_Z");
+    
+   TFile* fileWeights = new TFile("LaserCosmicWeights.root", "RECREATE");
+   TH1F *weights_x = new TH1F("weights_x", "", 100, 0, 1.0);
+   TH1F *chisq_x = new TH1F("chisq_x", "", 100, 0, 1.0);
+   TH3F *weights_x_3D = new TH3F("weights_3D_dX","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH1F *weights_y = new TH1F("weights_y", "", 100, 0, 1.0);
+    TH1F *chisq_y = new TH1F("chisq_y", "", 100, 0, 1.0);
+    TH3F *weights_y_3D = new TH3F("weights_3D_dY","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+
+    TH1F *weights_z = new TH1F("weights_z", "", 100, 0, 1.0);
+    TH1F *chisq_z = new TH1F("chisq_z", "", 100, 0, 1.0);
+    TH3F *weights_z_3D = new TH3F("weights_3D_dZ","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    //TF1 *f1 = new TF1("chi2", calcChi2, 0, 100.0, 2);
+    
+    
+    for(int xBin = 1; xBin < cosmic_dX->GetNbinsX(); ++xBin){
+        for(int yBin = 1; yBin < cosmic_dX->GetNbinsY(); ++yBin){
+            for(int zBin = 1; zBin < cosmic_dX->GetNbinsZ(); ++zBin){
+                bool useCosmic = goodCosmic(cosmic_dX->GetBinContent(xBin, yBin, zBin), cosmic_dX_err->GetBinContent(xBin, yBin, zBin));
+                bool useLaser  = goodLaser(laser_dX->GetBinContent(xBin, yBin, zBin), laser_dX_err->GetBinContent(xBin, yBin, zBin));
+                
+                if(useLaser && useCosmic){
+                
+                  ROOT::Math::Minimizer* minX =  ROOT::Math::Factory::CreateMinimizer("Minuit", "Migrad");
+                  minX->SetMaxFunctionCalls(1000000); // for Minuit/Minuit2
+                  minX->SetMaxIterations(10000);  // for GSL
+                  minX->SetTolerance(0.001);
+                  minX->SetPrintLevel(kPrint);
+                  ROOT::Math::Functor f1(&calcChi2,5);
+                  minX->SetFunction(f1);
+                
+                  minX->SetVariable(0, "x", 0.5,  0.01);
+                  minX->SetVariableLimits(0, 0.0, 1.0);
+                
+                  minX->SetFixedVariable(1, "cosmicVal", cosmic_dX->GetBinContent(xBin, yBin, zBin));
+                  minX->SetFixedVariable(2, "laserVal", laser_dX->GetBinContent(xBin, yBin, zBin));
+                  minX->SetFixedVariable(3, "truthVal", truth_dX->GetBinContent(xBin, yBin, zBin));
+                  minX->SetFixedVariable(4, "cosmicErr",cosmic_dX_err->GetBinContent(xBin, yBin, zBin) );
+                  minX->SetFixedVariable(5, "laserErr", laser_dX_err->GetBinContent(xBin, yBin, zBin) );
+                  minX->Minimize();
+                
+                  const double *xs = minX->X();
+                  weights_x->Fill(xs[0]);
+                  chisq_x->Fill(minX->MinValue());
+                  weights_x_3D->SetBinContent(xBin, yBin, zBin, xs[0]);
+                }
+                
+                else{
+                    weights_x->Fill(-1.0);
+                    chisq_x->Fill(-1.0);
+                    weights_x_3D->SetBinContent(xBin, yBin, zBin, -1.0);
+                }
+                
+                useCosmic = goodCosmic(cosmic_dY->GetBinContent(xBin, yBin, zBin), cosmic_dY_err->GetBinContent(xBin, yBin, zBin));
+                useLaser  = goodLaser(laser_dY->GetBinContent(xBin, yBin, zBin), laser_dY_err->GetBinContent(xBin, yBin, zBin));
+                if(useLaser && useCosmic){
+                    
+                    ROOT::Math::Minimizer* minX =  ROOT::Math::Factory::CreateMinimizer("Minuit", "Migrad");
+                    minX->SetMaxFunctionCalls(1000000); // for Minuit/Minuit2
+                    minX->SetMaxIterations(10000);  // for GSL
+                    minX->SetTolerance(0.001);
+                    minX->SetPrintLevel(kPrint);
+                    ROOT::Math::Functor f1(&calcChi2,5);
+                    minX->SetFunction(f1);
+                    
+                    minX->SetVariable(0, "x", 0.5,  0.01);
+                    minX->SetVariableLimits(0, 0.0, 1.0);
+                    
+                    minX->SetFixedVariable(1, "cosmicVal", cosmic_dY->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(2, "laserVal", laser_dY->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(3, "truthVal", truth_dY->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(4, "cosmicErr",cosmic_dY_err->GetBinContent(xBin, yBin, zBin) );
+                    minX->SetFixedVariable(5, "laserErr", laser_dY_err->GetBinContent(xBin, yBin, zBin) );
+                    minX->Minimize();
+                    
+                    const double *xs = minX->X();
+                    weights_y->Fill(xs[0]);
+                    chisq_y->Fill(minX->MinValue());
+                    weights_y_3D->SetBinContent(xBin, yBin, zBin, xs[0]);
+                }
+                
+                else{
+                    weights_y->Fill(-1.0);
+                    chisq_y->Fill(-1.0);
+                    weights_y_3D->SetBinContent(xBin, yBin, zBin, -1.0);
+                }
+                
+                useCosmic = goodCosmic(cosmic_dZ->GetBinContent(xBin, yBin, zBin), cosmic_dZ_err->GetBinContent(xBin, yBin, zBin));
+                useLaser  = goodLaser(laser_dZ->GetBinContent(xBin, yBin, zBin), laser_dZ_err->GetBinContent(xBin, yBin, zBin));
+                if(useLaser && useCosmic){
+                    
+                    ROOT::Math::Minimizer* minX =  ROOT::Math::Factory::CreateMinimizer("Minuit", "Migrad");
+                    minX->SetMaxFunctionCalls(1000000); // for Minuit/Minuit2
+                    minX->SetMaxIterations(10000);  // for GSL
+                    minX->SetTolerance(0.001);
+                    minX->SetPrintLevel(kPrint);
+                    ROOT::Math::Functor f1(&calcChi2,5);
+                    minX->SetFunction(f1);
+                    
+                    minX->SetVariable(0, "x", 0.5,  0.01);
+                    minX->SetVariableLimits(0, 0.0, 1.0);
+                    
+                    minX->SetFixedVariable(1, "cosmicVal", cosmic_dZ->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(2, "laserVal", laser_dZ->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(3, "truthVal", truth_dZ->GetBinContent(xBin, yBin, zBin));
+                    minX->SetFixedVariable(4, "cosmicErr",cosmic_dZ_err->GetBinContent(xBin, yBin, zBin) );
+                    minX->SetFixedVariable(5, "laserErr", laser_dZ_err->GetBinContent(xBin, yBin, zBin) );
+                    minX->Minimize();
+                    
+                    const double *xs = minX->X();
+                    weights_z->Fill(xs[0]);
+                    chisq_z->Fill(minX->MinValue());
+                    weights_z_3D->SetBinContent(xBin, yBin, zBin, xs[0]);
+                }
+                
+                else{
+                    weights_z->Fill(-1.0);
+                    chisq_z->Fill(-1.0);
+                    weights_z_3D->SetBinContent(xBin, yBin, zBin, -1.0);
+                }
+
+            }
+        }
+    }
+    
+    for(int zBin = 1; zBin < weights_z_3D->GetNbinsZ(); ++zBin){
+        TH2F weights_2D_dX(Form("weights_2D_dX_%d",zBin),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax) ;
+        TH2F weights_2D_dY(Form("weights_2D_dY_%d",zBin),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax) ;
+        TH2F weights_2D_dZ(Form("weights_2D_dZ_%d",zBin),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        for(int xBin = 1; xBin < weights_z_3D->GetNbinsX(); ++xBin){
+          for(int yBin = 1; yBin < weights_z_3D->GetNbinsY(); ++yBin){
+              weights_2D_dX.SetBinContent(xBin, yBin, weights_x_3D->GetBinContent(xBin, yBin, zBin) );
+              weights_2D_dY.SetBinContent(xBin, yBin, weights_y_3D->GetBinContent(xBin, yBin, zBin) );
+              weights_2D_dZ.SetBinContent(xBin, yBin, weights_z_3D->GetBinContent(xBin, yBin, zBin) );
+            }
+        }
+         drawPlanarPlot(weights_2D_dX,  zBin, "Cosmic Weight dX", "weight_2D_dX", axisType::zAxis, 1.0);
+         drawPlanarPlot(weights_2D_dY,  zBin, "Cosmic Weight dY", "weight_2D_dY", axisType::zAxis, 1.0);
+         drawPlanarPlot(weights_2D_dZ,  zBin, "Cosmic Weight dZ", "weight_2D_dZ", axisType::zAxis, 1.0);
+    }
+    
+    for(int yBin = 1; yBin < weights_z_3D->GetNbinsY(); ++yBin){
+        TH2F weights_2D_dX(Form("weights_2D_dX_%d",yBin),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F weights_2D_dY(Form("weights_2D_dY_%d",yBin),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F weights_2D_dZ(Form("weights_2D_dZ_%d",yBin),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        for(int xBin = 1; xBin < weights_z_3D->GetNbinsX(); ++xBin){
+            for(int zBin = 1; zBin < weights_z_3D->GetNbinsZ(); ++zBin){
+                weights_2D_dX.SetBinContent(zBin, xBin, weights_x_3D->GetBinContent(xBin, yBin, zBin) );
+                weights_2D_dY.SetBinContent(zBin, xBin, weights_y_3D->GetBinContent(xBin, yBin, zBin) );
+                weights_2D_dZ.SetBinContent(zBin, xBin, weights_z_3D->GetBinContent(xBin, yBin, zBin) );
+            }
+        }
+        drawPlanarPlot(weights_2D_dX,  yBin, "Cosmic Weight dX", "weight_2D_dX", axisType::yAxis, 1.0);
+        drawPlanarPlot(weights_2D_dY,  yBin, "Cosmic Weight dY", "weight_2D_dY", axisType::yAxis, 1.0);
+        drawPlanarPlot(weights_2D_dZ,  yBin, "Cosmic Weight dZ", "weight_2D_dZ", axisType::yAxis, 1.0);
+    }
+    
+    fileWeights->Write();
+    fileWeights->Close();
+    
+    
+    
+}
+
+void eFieldCalculator::combineMaps(bool isData, bool skipLaser, bool skipCosmic){
+  //const int lowZ    = 21;
+  //const int highZ   = 87;
+  const int lowZ    = 0;
+  const int highZ   = 1000;
   const int lowX    = 0;
   const int highX   = 40;
-  const int lowY    = 4;
-  const int highY   = 21;
+  //const int lowY    = 4;
+  const int lowY    = 0;
+  const int highY   = 210;
   double driftV = 0.0;
-  //TF1 *f1 = new TF1("chi2", calcChi2, 0, 100.0, 2);
-  //Minimizer *min = new Minimizer("Minuit", "Migrad");
+  
     
-    if(isData)
+  if(isData)
       driftV = 0.01;
   
-  
+  if(skipLaser && skipCosmic){
+      std::cout << "Skipping Laser and Cosmic, i.e. do nothing!" << std::endl;
+      return;
+  }
+    
   std::string inputLaser;
   std::string inputCosmic;
   std::string inputGoodVoxels;
   std::string inputTruth;
   std::string outputName;
   if(skipLaser)
-      outputName = "MergedMapsCosmicOnly.root";
+      outputName = "MergedMapsCosmicOnlyNoRelErr.root";
+  else if(skipCosmic)
+      outputName = "MergedMapsLaserOnlyNoRelErr.root";
   else
-      outputName = "MergedMapsCosmicAndLaser.root";
+      outputName = "MergedMapsCosmicAndLaserMC.root";
+  
   if(isData){
      inputLaser = "RecoCorr-N3-S50-Data-2side-Anode.root";
      inputCosmic = "output_hists_data_200k_Aug3.root";
-     inputGoodVoxels = "GoodVoxels.root";
+     inputGoodVoxels = "LaserCosmicWeights.root";
      inputTruth      = "output_truth_hists.root";
   }
   
@@ -1755,11 +2081,6 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
   TH3F* truth_dX = (TH3F*) fileTruth->Get("True_Displacement_X");
   TH3F* truth_dY = (TH3F*) fileTruth->Get("True_Displacement_Y");
   TH3F* truth_dZ = (TH3F*) fileTruth->Get("True_Displacement_Z");
-    
-  TFile* fileGoodVoxels = new TFile(inputGoodVoxels.c_str());
-  TH3F*  good_dX = (TH3F*) fileGoodVoxels->Get("good_dX");
-  TH3F*  good_dY = (TH3F*) fileGoodVoxels->Get("good_dY");
-  TH3F*  good_dZ = (TH3F*) fileGoodVoxels->Get("good_dZ");
   
   outputHistos->cd();
   
@@ -1770,8 +2091,6 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
   TH3F* combine_dX_err = new TH3F("combined_dX_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);  
   TH3F* combine_dY_err = new TH3F("combined_dY_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);  
   TH3F* combine_dZ_err = new TH3F("combined_dZ_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
-    
-  TH1F *chi2_plot = new TH1F("chi2_plot", "Chi2", 1000, 0, 100.0);
   
   for(int i = 1; i <= combine_dX->GetNbinsX(); i++){
 
@@ -1788,25 +2107,14 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
      
      double x_correction = -i*driftV*cosmic_dX->GetXaxis()->GetBinWidth(i);
 	 
-	 useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k));
+	 useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)  && !skipCosmic);
 	 useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY && !skipLaser);
      //useLaser = false;
-     goodAgreement = true;
-     
-     if(!goodAgreement){
-         numerator = 0.0;
-         denominator = 1.0;
-         error = 0.0;
-     }
-	 else if(useCosmic && useLaser){
+    if(useCosmic && useLaser){
        numerator = ( (cosmic_dX->GetBinContent(i,j,k)+x_correction)/cosmic_dX_err->GetBinContent(i,j,k) + laser_dX->GetBinContent(i,j,k)/laser_dX_err->GetBinContent(i,j,k) );
 	   denominator = 1/cosmic_dX_err->GetBinContent(i,j,k) + 1/laser_dX_err->GetBinContent(i,j,k);
 	   error = sqrt(pow(cosmic_dX_err->GetBinContent(i,j,k), 2) + pow(laser_dX_err->GetBinContent(i,j,k), 2));
-         double weights[2] = {0.5, 0.5};
-         double vals[4]    = {cosmic_dX->GetBinContent(i,j,k)+x_correction, laser_dX->GetBinContent(i,j,k), truth_dX->GetBinContent(i,j,k), error};
-         float chi2 = calcChi2(weights, vals);
-         if(chi2 != 0) chi2_plot->Fill(chi2);
-         else std::cout << "Chi2 equals 0!" << std::endl;
+        
          }
 	 
 	 else if(!useCosmic && useLaser){
@@ -1822,6 +2130,7 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 	 }
 	 
 	 else{
+       //std::cout << laser_dX->GetBinContent(i,j,k) << " " << laser_dX_err->GetBinContent(i,j,k) << std::endl;
        numerator = 0.0;
 	   denominator = 1.0;
 	   error = 0.0;
@@ -1836,18 +2145,11 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 	 else
 	   std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
 	 
-	 useCosmic = goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k) );
+	 useCosmic = goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k) && !skipCosmic);
 	 useLaser  = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY && !skipLaser);
      //useLaser = false;
-     goodAgreement = true;
-     
-    if(!goodAgreement){
-      numerator = 0.0;
-      denominator = 1.0;
-      error = 0.0;
-    }
 	 
-	else if(useCosmic && useLaser){
+	if(useCosmic && useLaser){
            numerator = (cosmic_dY->GetBinContent(i,j,k)/cosmic_dY_err->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k)/laser_dY_err->GetBinContent(i,j,k) );
 	   denominator = 1/cosmic_dY_err->GetBinContent(i,j,k) + 1/laser_dY_err->GetBinContent(i,j,k);
 	   error = sqrt(pow(cosmic_dY_err->GetBinContent(i,j,k), 2) + pow(laser_dY_err->GetBinContent(i,j,k), 2));
@@ -1866,7 +2168,8 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 	 }
 	 
 	 else{
-           numerator = 0.0;
+       std::cout << laser_dY->GetBinContent(i,j,k) << " " << laser_dY_err->GetBinContent(i,j,k) << std::endl;
+       numerator = 0.0;
 	   denominator = 1.0;
 	   error = 0.0;
 	 }
@@ -1880,18 +2183,11 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 	 else
 	   std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
 	 
-	 useCosmic = goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k));
+	 useCosmic = goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k) && !skipCosmic);
 	 useLaser  = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY && !skipLaser);
      //useLaser = false;
-     goodAgreement = true;
-     
-     if(!goodAgreement){
-              numerator = 0.0;
-              denominator = 1.0;
-              error = 0.0;
-     }
 	 
-	 else if(useCosmic && useLaser){
+	 if(useCosmic && useLaser){
            numerator = (cosmic_dZ->GetBinContent(i,j,k)/cosmic_dZ_err->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k)/laser_dZ_err->GetBinContent(i,j,k) );
 	   denominator = 1/cosmic_dZ_err->GetBinContent(i,j,k) + 1/laser_dZ_err->GetBinContent(i,j,k);
 	   error = sqrt(pow(cosmic_dZ_err->GetBinContent(i,j,k), 2) + pow(laser_dZ_err->GetBinContent(i,j,k), 2));
@@ -1910,7 +2206,8 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 	 }
 	 
 	 else{
-           numerator = 0.0;
+       //std::cout << laser_dZ->GetBinContent(i,j,k) << " " << laser_dZ_err->GetBinContent(i,j,k) << std::endl;
+       numerator = 0.0;
 	   denominator = 1.0;
 	   error = 0.0;
 	 }
@@ -1959,20 +2256,232 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser){
 
 }
 
+void eFieldCalculator::combineWeightedMaps(){
+    const int lowZ    = 21;
+    const int highZ   = 87;
+    const int lowX    = 0;
+    const int highX   = 40;
+    const int lowY    = 4;
+    const int highY   = 210;
+    double driftV = 0.01;
+
+    std::string outputName = "MergedMapsWeighted.root";
+    std::string  inputLaser = "RecoCorr-N3-S50-Data-2side-Anode.root";
+    std::string  inputCosmic = "output_hists_data_200k_Aug3.root";
+    std::string  inputGoodVoxels = "LaserCosmicWeights.root";
+    std::string  inputTruth      = "output_truth_hists.root";
+    
+    
+    TFile *outputHistos = new TFile(outputName.c_str(), "RECREATE");
+    
+    TFile* fileLaser = new TFile(inputLaser.c_str());
+    TH3F* laser_dX = (TH3F*) fileLaser->Get("Reco_Displacement_X");
+    TH3F* laser_dY = (TH3F*) fileLaser->Get("Reco_Displacement_Y");
+    TH3F* laser_dZ = (TH3F*) fileLaser->Get("Reco_Displacement_Z");
+    TH3F* laser_dX_err = (TH3F*) fileLaser->Get("Reco_Displacement_X_Error");
+    TH3F* laser_dY_err = (TH3F*) fileLaser->Get("Reco_Displacement_Y_Error");
+    TH3F* laser_dZ_err = (TH3F*) fileLaser->Get("Reco_Displacement_Z_Error");
+    
+    TFile* fileCosmic = new TFile(inputCosmic.c_str());
+    TH3F* cosmic_dX = (TH3F*) fileCosmic->Get("Reco_Displacement_X");
+    TH3F* cosmic_dY = (TH3F*) fileCosmic->Get("Reco_Displacement_Y");
+    TH3F* cosmic_dZ = (TH3F*) fileCosmic->Get("Reco_Displacement_Z");
+    TH3F* cosmic_dX_err = (TH3F*) fileCosmic->Get("Reco_Displacement_X_Error");
+    TH3F* cosmic_dY_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Y_Error");
+    TH3F* cosmic_dZ_err = (TH3F*) fileCosmic->Get("Reco_Displacement_Z_Error");
+    
+    TFile* fileTruth = new TFile(inputTruth.c_str());
+    TH3F* truth_dX = (TH3F*) fileTruth->Get("True_Displacement_X");
+    TH3F* truth_dY = (TH3F*) fileTruth->Get("True_Displacement_Y");
+    TH3F* truth_dZ = (TH3F*) fileTruth->Get("True_Displacement_Z");
+    
+    TFile* fileGoodVoxels = new TFile(inputGoodVoxels.c_str());
+    TH3F*  weights_dX = (TH3F*) fileGoodVoxels->Get("weights_3D_dX");
+    TH3F*  weights_dY = (TH3F*) fileGoodVoxels->Get("weights_3D_dY");
+    TH3F*  weights_dZ = (TH3F*) fileGoodVoxels->Get("weights_3D_dZ");
+    
+    outputHistos->cd();
+    
+    TH3F* combine_dX = new TH3F("combined_dX","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* combine_dY = new TH3F("combined_dY","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* combine_dZ = new TH3F("combined_dZ","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH3F* combine_dX_err = new TH3F("combined_dX_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* combine_dY_err = new TH3F("combined_dY_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* combine_dZ_err = new TH3F("combined_dZ_Error","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH1F *chi2_plot = new TH1F("chi2_plot", "Chi2", 1000, 0, 100.0);
+    
+    for(int i = 1; i <= combine_dX->GetNbinsX(); i++){
+        
+        for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+            for(int k = 1; k <= combine_dX->GetNbinsZ(); k++){
+                
+                double numerator   = 0.0;
+                double denominator = 0.0;
+                double error       = 0.0;
+                
+                bool useCosmic = false;
+                bool useLaser  = false;
+                bool goodAgreement = false;
+                
+                double x_correction = -i*driftV*cosmic_dX->GetXaxis()->GetBinWidth(i);
+                double cosmicWeight = weights_dX->GetBinContent(i,j,k);
+                double laserWeight  = 1.0 - cosmicWeight;
+                
+                useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k));
+                useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY);
+                //useLaser = false;
+                if(useCosmic && useLaser){
+                    numerator = ( cosmicWeight*(cosmic_dX->GetBinContent(i,j,k)+x_correction)  + laserWeight*laser_dX->GetBinContent(i,j,k) );
+                    denominator = 1.0;
+                    error = sqrt(pow(cosmic_dX_err->GetBinContent(i,j,k), 2) + pow(laser_dX_err->GetBinContent(i,j,k), 2));
+                    
+                }
+                
+                else if(!useCosmic && useLaser){
+                    numerator = laser_dX->GetBinContent(i,j,k);
+                    denominator = 1.0;
+                    error = laser_dX_err->GetBinContent(i,j,k);
+                }
+                
+                else if(useCosmic && !useLaser){
+                    numerator = cosmic_dX->GetBinContent(i,j,k) + x_correction;
+                    denominator = 1.0;
+                    error = cosmic_dX_err->GetBinContent(i,j,k);
+                }
+                
+                else{
+                    numerator = 0.0;
+                    denominator = 1.0;
+                    error = 0.0;
+                }
+                
+                if(denominator != 0){
+                    combine_dX->SetBinContent(i,j,k, numerator/denominator);
+                    combine_dX_err->SetBinContent(i,j,k, error);
+                    
+                }
+                
+                else
+                    std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
+                
+                useCosmic = goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k) );
+                useLaser  = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY);
+                 cosmicWeight = weights_dY->GetBinContent(i,j,k);
+                laserWeight  = 1.0 - cosmicWeight;
+                
+                if(useCosmic && useLaser){
+                    numerator = (cosmicWeight*cosmic_dY->GetBinContent(i,j,k) + laserWeight*laser_dY->GetBinContent(i,j,k) );
+                    denominator = 1.0;
+                    error = sqrt(pow(cosmic_dY_err->GetBinContent(i,j,k), 2) + pow(laser_dY_err->GetBinContent(i,j,k), 2));
+                }
+                
+                else if(!useCosmic && useLaser){
+                    numerator = laser_dY->GetBinContent(i,j,k);
+                    denominator = 1.0;
+                    error = laser_dY_err->GetBinContent(i,j,k);
+                }
+                
+                else if(useCosmic && !useLaser){
+                    numerator = cosmic_dY->GetBinContent(i,j,k);
+                    denominator = 1.0;
+                    error = cosmic_dY_err->GetBinContent(i,j,k);
+                }
+                
+                else{
+                    numerator = 0.0;
+                    denominator = 1.0;
+                    error = 0.0;
+                }
+                
+                if(denominator != 0){
+                    combine_dY->SetBinContent(i,j,k, numerator/denominator);
+                    combine_dY_err->SetBinContent(i,j,k, error);
+                    
+                }
+                
+                else
+                    std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
+                
+                useCosmic = goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k));
+                useLaser  = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && k >= lowZ && k < highZ && j >= lowY && j < highY);
+                cosmicWeight = weights_dZ->GetBinContent(i,j,k);
+                laserWeight  = 1.0 - cosmicWeight;
+                
+                if(useCosmic && useLaser){
+                    numerator = (cosmicWeight*cosmic_dZ->GetBinContent(i,j,k) + laserWeight*laser_dZ->GetBinContent(i,j,k) );
+                    denominator = 1.0;
+                    error = sqrt(pow(cosmic_dZ_err->GetBinContent(i,j,k), 2) + pow(laser_dZ_err->GetBinContent(i,j,k), 2));
+                }
+                
+                else if(!useCosmic && useLaser){
+                    numerator = laser_dZ->GetBinContent(i,j,k);
+                    denominator = 1.0;
+                    error = laser_dZ_err->GetBinContent(i,j,k);
+                }
+                
+                else if(useCosmic && !useLaser){
+                    numerator = cosmic_dZ->GetBinContent(i,j,k);
+                    denominator = 1.0;
+                    error = cosmic_dZ_err->GetBinContent(i,j,k);
+                }
+                
+                else{
+                    numerator = 0.0;
+                    denominator = 1.0;
+                    error = 0.0;
+                }
+                
+                if(denominator != 0){
+                    combine_dZ->SetBinContent(i,j,k, numerator/denominator);
+                    combine_dZ_err->SetBinContent(i,j,k, error);
+                    
+                }
+                
+                else
+                    std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
+                
+                
+                
+                
+            }//end of loop over y bins
+        }//end of loop over x bins
+        
+    }//end of loop over z bins
+    
+    
+    
+    
+    
+    for(int k = 1; k <= combine_dX->GetNbinsZ(); k++){
+        TH2F combine_2D_dX(Form("combined_2D_dX_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F combine_2D_dY(Form("combined_2D_dY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F combine_2D_dZ(Form("combined_2D_dZ_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        
+        for(int i = 1; i <= combine_dX->GetNbinsX(); i++){
+            for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+                combine_2D_dX.SetBinContent(i,j,combine_dX->GetBinContent(i,j,k));
+                combine_2D_dY.SetBinContent(i,j,combine_dY->GetBinContent(i,j,k));
+                combine_2D_dZ.SetBinContent(i,j,combine_dZ->GetBinContent(i,j,k));
+                
+            }
+        }
+        drawPlanarPlot(combine_2D_dX, k, "Combined #DeltaX", "combined_2D_dX", axisType::zAxis);
+        drawPlanarPlot(combine_2D_dY, k, "Combined #DeltaY", "combined_2D_dY", axisType::zAxis);
+        drawPlanarPlot(combine_2D_dZ, k, "Combined #DeltaZ", "combined_2D_dZ", axisType::zAxis);
+    }
+    
+    outputHistos->Write();
+    outputHistos->Close();
+    
+}
+
 float eFieldCalculator::LinInterp(float x, float x1, float x2, float q00, float q01) {
     return ((x2 - x) / (x2 - x1)) * q00 + ((x - x1) / (x2 - x1)) * q01;
 }
 
-float eFieldCalculator::calcChi2(double *scale, double *vals){
-    float numerator = pow(((scale[0]*vals[0]+scale[1]*vals[1]) - vals[2]),2);
-    float denominator = pow(vals[3],2);
-    
-    if(denominator > 0.0)
-        return numerator/denominator;
-    else
-        return 0.0;
-    
-}
+
 
 float eFieldCalculator::TrilinInterp(float x, float y, float z, float q000, float q001, float q010, float q011, float q100, float q101, float q110, float q111, float x1, float x2, float y1, float y2, float z1, float z2) {
     float x00 = LinInterp(x, x1, x2, q000, q100);
@@ -2130,26 +2639,46 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     
     //Look at larger track slices
     //const double bufferLength = 0.05*100;
-    double driftV = 0.01;
-    //double driftV   = 0.0;
+    //double driftV = 0.01;
+    double driftV   = 0.0;
     const double bufferLength = 0.0;
+    const double epsilon = 1e-18;
+    const bool skipZeroes = true;
+    const bool doTH3Int = true;
     
-    const int minTrackPoints = 50;
+    const int minTrackPoints = 75;
+    //const int minTrackPoints = 50; //unit test
     const int numTrackSegPoints = 15;
+    const int lastSegment       = 2;
+    const int firstSegment      = 0;
+    //const int firstSegment      = 30; //30 for anode piercing
+    //const int maxTrackSegments  = 2;
+    const int maxTrackSegments    = 1;
+    const int stepsBack           = 1; //unit test
+    //const int stepsBack           = 30;
+    const int maxBadPoints        = 1; //normally 5
     
     TGaxis::SetMaxDigits(3);
     
     double numDivisions_x = nCalibDivisions_x;
     double numDivisions_y = nCalibDivisions_y;
     double numDivisions_z = nCalibDivisions_z;
+    /*
+    const double zLow = 0.0;
+    const double zHigh = Lz;
+    */
+    const double xLow  = 0.0;
+    //const double xLow  = 1.4;
+    const double xHigh = Lx;
     
-    //const double zMax = Lz;
-    //const double zMin = 0.0;
+    const double yLow = 0.0;
+    const double yHigh = Ly;
     
     const double zLow = 2.1;
-    const double zHigh = 9.0;
+    const double zHigh = 8.0;
     
-    
+   // const double zLow = 0.0;
+   // const double zHigh = Lz;
     /*
     Double_t stops[5] = {0.00,0.34,0.61,0.84,1.00};
     Double_t red[5] = {0.00,0.00,0.87,1.00,0.51};
@@ -2163,6 +2692,27 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     
     TH1F *origAngHist = new TH1F("origAngHist","",50,0.0,10.0);
     TH1F *corrAngHist = new TH1F("corrAngHist","",50,0.0,10.0);
+    
+    TH1F *h_xBins[maxTrackSegments];
+    TH1F *h_yBins[maxTrackSegments];
+    TH1F *h_zBins[maxTrackSegments];
+    
+    TH1F *h_last_xBins[maxTrackSegments];
+    TH1F *h_last_yBins[maxTrackSegments];
+    TH1F *h_last_zBins[maxTrackSegments];
+    
+    
+    for(int i=0; i<maxTrackSegments; ++i){
+        h_xBins[i] = new TH1F(Form("xBins_%d", i),"",nCalibDivisions_x+1,0.0,25.0);
+        h_yBins[i] = new TH1F(Form("yBins_%d", i),"",nCalibDivisions_y+1,0.0,25.0);
+        h_zBins[i] = new TH1F(Form("zBins_%d", i),"",nCalibDivisions_z+1,0.0,100.0);
+        
+        h_last_xBins[i] = new TH1F(Form("last_xBins_%d", i),"",nCalibDivisions_x+1,0.0,25.0);
+        h_last_yBins[i] = new TH1F(Form("last_yBins_%d", i),"",nCalibDivisions_y+1,0.0,25.0);
+        h_last_zBins[i] = new TH1F(Form("last_zBins_%d", i),"",nCalibDivisions_z+1,0.0,100.0);
+        
+        
+    }
     
     TH1F *origAngHistByZ[nCalibDivisions_z+1];
     TH1F *corrAngHistByZ[nCalibDivisions_z+1];
@@ -2218,16 +2768,16 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     std::string meanFileName;
     
     if(skipLaser){
-       inputMapFileName = "MergedMapsCosmicOnly.root";
-       plotName = "AnglePlots/CombinedAngCosmicOnly.png";
+       inputMapFileName = "/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnly.root";
+       plotName = "AnglePlots/CombinedAngCosmicOnlyNoZeroes.png";
        meanFileName = "MeansCosmicOnly.root";
     }
     
     else{
         std::cout << "Using Laser..." << std::endl;
-        inputMapFileName = "MergedMapsCosmicAndLaser.root";
-        plotName = "AnglePlots/CombinedAngCosmicAndLaser.png";
-        meanFileName = "MeansCosmicAndLaser.root";
+        inputMapFileName = "/uboone/data/users/joelam/SCEInputFiles/MergedMapsLaserOnlyMC.root";
+        plotName = "AnglePlots/CombinedAngLaserOnlyNoZeroesMC.png";
+        meanFileName = "MeanLaserOnly.root";
     }
     //TFile* inputFileInterp = new TFile("/uboone/data/users/mrmooney/ForJoel/output_MC_30k.root");
 
@@ -2267,11 +2817,13 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     
     
     //TFile* inputFile = new TFile("output.root");
-    TFile* inputFile = new TFile("/uboone/data/users/mrmooney/ForJoel/output_data_tracks.root");
-    ////TFile* inputFile = new TFile("output_MC_NoSCE_tracks.root");
-    //TFile* inputFile = new TFile("output_data_tracks.root");
-    ////TFile* inputFile = new TFile("output_data_tracks_new.root");
-    ////TFile* inputFile = new TFile("output_data_tracks_noMCScut.root");
+   //TFile* inputFile = new TFile("/uboone/data/users/mrmooney/ForJoel/output_data_tracks.root");
+    TFile* inputFile = new TFile("/uboone/data/users/mrmooney/ForJoel/output_MC_tracks.root");
+   // TFile* inputFile = new TFile("Naive_straight_tracks_w_hits.root");
+   //TFile* inputFile = new TFile("straight_tracks_w_distortion_v1.root");
+   //TFile* inputFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/LaserTracksData.root");
+    
+
     TTreeReader readerTracks("SpaCEtree_tracks", inputFile);
     TTreeReaderValue<Int_t> nElec_tracks(readerTracks, "nElec_tracks");
     TTreeReaderArray<Double_t> elecX_tracks_orig(readerTracks, "elecX_tracks");
@@ -2309,78 +2861,163 @@ void eFieldCalculator::studyResults2(bool skipLaser)
         for(int j = 0; j < dist_dX->GetNbinsY(); j++){
             for(int k = 0; k < dist_dX->GetNbinsZ(); k++){
                 corr_Dx[i][j][k] = -0.01*dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1), dist_dX_err->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1)))
+                if(!goodLaser(dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1), dist_dX_err->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1))){
                     corr_Dx[i][j][k] = 0.0;
+                    //std::cout << "Bad point Dx: " <<  i << " " << " " << j << " " << k << std::endl;
+                }
                 corr_Dy[i][j][k] = 0.01*dist_dY->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dY->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1), dist_dY_err->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1)))
+                if(!goodLaser(dist_dY->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1), dist_dY_err->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1))){
                     corr_Dy[i][j][k] = 0.0;
+                    //std::cout << "Bad point Dy: " <<  i << " " << " " << j << " " << k << std::endl;
+                }
                 corr_Dz[i][j][k] = 0.01*dist_dZ->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dZ->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1), dist_dZ_err->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1)))
+                if(!goodLaser(dist_dZ->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1), dist_dZ_err->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1))){
                     corr_Dz[i][j][k] = 0.0;
-                //std::cout << corr_Dz[i][j][k] << std::endl;
-        /*corr_Dx[TMath::Nint(*xReco_calib*numDivisions_x/Lx)][TMath::Nint(*yReco_calib*numDivisions_y/Ly)][TMath::Nint(*zReco_calib*numDivisions_z/Lz)] += *Dx_calib;
-        corr_Dy[TMath::Nint(*xReco_calib*numDivisions_x/Lx)][TMath::Nint(*yReco_calib*numDivisions_y/Ly)][TMath::Nint(*zReco_calib*numDivisions_z/Lz)] += *Dy_calib;
-        corr_Dz[TMath::Nint(*xReco_calib*numDivisions_x/Lx)][TMath::Nint(*yReco_calib*numDivisions_y/Ly)][TMath::Nint(*zReco_calib*numDivisions_z/Lz)] += *Dz_calib;*/
+                    //std::cout << "Bad point Dz: " <<  i << " " << " " << j << " " << k << std::endl;
+                }
+                
             }
         }
     }
+    
+    TH3F* diff_dX = new TH3F("diff_dX","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
     
     int counter = 0;
     //while (readerTracks.Next())
     //while ((readerTracks.Next()) && (counter < 100000))
     while ((readerTracks.Next()) && (counter < 213000))
     {
-        if(counter % 1000 == 0) {std::cout << counter << std::endl;}
+        //std::cout << "Go go go" << std::endl;
+        if(counter % 10000 == 0) {std::cout << counter << std::endl;}
         counter++;
         
         if (*nElec_tracks >= minTrackPoints) {
-            
+          for(int trackSeg = 0; trackSeg < maxTrackSegments; ++trackSeg){
             PointCloud startPoints;
             PointCloud endPoints;
             
             std::vector<double> elecX_tracks;
             std::vector<double> elecY_tracks;
             std::vector<double> elecZ_tracks;
-            
-            int xBin = TMath::Nint(elecX_tracks_orig[0]*numDivisions_x/Lx);
-            int yBin = TMath::Nint(elecY_tracks_orig[0]*numDivisions_y/Ly);
-            int zBin = TMath::Nint(elecZ_tracks_orig[0]*numDivisions_z/Lz);
-            
-            if(xBin > nCalibDivisions_x)
-                xBin = nCalibDivisions_x;
-            if(yBin > nCalibDivisions_y)
-                yBin = nCalibDivisions_y;
-            if(zBin > nCalibDivisions_z)
-                zBin = nCalibDivisions_z;
-            
+   
             for(int i = 0; i < *nElec_tracks; i++){
-                std::vector<double> points_laser;
+                //std::vector<double> points_laser;
                 //std::vector<double> points_cosmic;
                 
                 const double pointOffset = driftV*(Lx-elecX_tracks_orig[i]);
+              
+                elecX_tracks.push_back(elecX_tracks_orig[i]  + pointOffset);
+                elecY_tracks.push_back(elecY_tracks_orig[i]);
+                elecZ_tracks.push_back(elecZ_tracks_orig[i]);
                 
-                points_laser.push_back(elecX_tracks_orig[i]);
-                points_laser.push_back(elecY_tracks_orig[i]);
-                points_laser.push_back(elecZ_tracks_orig[i]);
-                
-                //points_cosmic = cosmicToLaser(points_laser);
-                //std::cout << points_laser[0] << " " << pointOffset << std::endl;
-                elecX_tracks.push_back(points_laser[0] + pointOffset);
-                elecY_tracks.push_back(points_laser[1] );
-                elecZ_tracks.push_back(points_laser[2] );
-                
-                
+                /*
+                elecX_tracks.push_back(doCoordTransformX(elecX_tracks_orig[i]) );
+                elecY_tracks.push_back(doCoordTransformY(elecY_tracks_orig[i]) );
+                elecZ_tracks.push_back(doCoordTransformZ(elecZ_tracks_orig[i]) );
+                */
+                //std::cout << i << " " << elecX_tracks.at(i) << " " << elecY_tracks.at(i) << " " << elecZ_tracks.at(i) << std::endl;
             }
+              
+              int xBin = TMath::Nint(elecX_tracks[firstSegment]*numDivisions_x/Lx);
+              int yBin = TMath::Nint(elecY_tracks[firstSegment]*numDivisions_y/Ly);
+              int zBin = TMath::Nint(elecZ_tracks[firstSegment]*numDivisions_z/Lz);
+              
+              int last_xBin = TMath::Nint(elecX_tracks[*nElec_tracks-stepsBack]*numDivisions_x/Lx);
+              int last_yBin = TMath::Nint(elecY_tracks[*nElec_tracks-stepsBack]*numDivisions_y/Ly);
+              int last_zBin = TMath::Nint(elecZ_tracks[*nElec_tracks-stepsBack]*numDivisions_z/Lz);
+              
+              if(xBin > nCalibDivisions_x)
+                  xBin = nCalibDivisions_x;
+              if(yBin > nCalibDivisions_y)
+                  yBin = nCalibDivisions_y;
+              if(zBin > nCalibDivisions_z)
+                  zBin = nCalibDivisions_z;
+              
+              if(last_xBin > nCalibDivisions_x)
+                  last_xBin = nCalibDivisions_x;
+              if(last_yBin > nCalibDivisions_y)
+                  last_yBin = nCalibDivisions_y;
+              if(last_zBin > nCalibDivisions_z)
+                  last_zBin = nCalibDivisions_z;
+
             
             
             Int_t numBadPoints_start = 0;
-            for (int i = 0; i < numTrackSegPoints; i++) {
-                if ((elecX_tracks[i] <= 0.0-bufferLength) || (elecX_tracks[i] >= Lx+bufferLength) || (elecY_tracks[i] <= (0 - bufferLength)) || (elecY_tracks[i] >= Ly+bufferLength) || (elecZ_tracks[i] <= 0-bufferLength) || (elecZ_tracks[i] >= Lz+bufferLength)) {
+              
+              for (int i = firstSegment; i < numTrackSegPoints+firstSegment; i++) {
+                //Calculate points for tri-linear interp here
+                  //Calculate points for tri-linear interp here
+                  float x_center = elecX_tracks[i];
+                  float y_center = elecY_tracks[i];
+                  float z_center = elecZ_tracks[i];
+                  
+                  float dXddd = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXddu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXdud = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXduu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXudd = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXudu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXuud = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXuuu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float dYddd = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYddu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYdud = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYduu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYudd = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYudu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYuud = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYuuu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float dZddd = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZddu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZdud = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZduu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZudd = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZudu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZuud = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZuuu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float x_up = TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                  float x_down = TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                  float y_up   = TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                  float y_down = TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                  float z_up = TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                  float z_down = TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                  
+                  float xDist = TrilinInterp(x_center, y_center, z_center, dXddd, dXddu, dXdud, dXduu, dXudd, dXudu, dXuud, dXuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  float yDist = TrilinInterp(x_center, y_center, z_center, dYddd, dYddu, dYdud, dYduu, dYudd, dYudu, dYuud, dYuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  float zDist = TrilinInterp(x_center, y_center, z_center, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  
+                  float xDistInt = -0.01*dist_dX->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      xDist = xDistInt;
+                  float yDistInt = 0.01*dist_dY->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      yDist = yDistInt;
+                  float zDistInt = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      zDist = zDistInt;
+                  
+                  
+                if ((elecX_tracks[i] <= xLow) || (elecX_tracks[i] >= xHigh) || (elecY_tracks[i] <= yLow) || (elecY_tracks[i] >= yHigh) || (elecZ_tracks[i] <= zLow) || (elecZ_tracks[i] >= zHigh)) {
+                    //std::cout << "Bad point: " << elecX_tracks[i] << " " << elecY_tracks[i] << " " << elecZ_tracks[i] << std::endl;
                     numBadPoints_start++;
                     continue;
                 }
+                  
+                if(skipZeroes && (fabs(xDist) < epsilon || fabs(yDist) < epsilon || fabs(zDist) < epsilon ) ){
+                      //std::cout << "Bad point: " << xDist << " " << yDist << " " << zDist << std::endl;
+                      numBadPoints_start++;
+                      continue;
+                    
+                  }
+                  
+                if(xDist>1E10 || yDist>1E10 || zDist>1E10)
+                  std::cout << "Bad distortion: " << xDist << " " << yDist << " " << zDist << std::endl;
                 
-                Point tempPoint;
+                  
+                  Point tempPoint;
                 tempPoint.x = elecX_tracks[i];
                 tempPoint.y = elecY_tracks[i];
                 tempPoint.z = elecZ_tracks[i];
@@ -2402,14 +3039,76 @@ void eFieldCalculator::studyResults2(bool skipLaser)
                 
                 startPoints.push_back(tempPoint);
             }
-            if (numBadPoints_start > 5) continue;
+            if (numBadPoints_start > maxBadPoints) continue;
             
             Int_t numBadPoints_end = 0;
-            for (int i = *nElec_tracks-1; i > *nElec_tracks-1-numTrackSegPoints; i--) {
-                if ((elecX_tracks[i] <= 0.0-bufferLength) || (elecX_tracks[i] >= Lx+bufferLength) || (elecY_tracks[i] <=(0 - bufferLength)) || (elecY_tracks[i] >= Ly+bufferLength) || (elecZ_tracks[i] <= 0-bufferLength) || (elecZ_tracks[i] >= Lz+bufferLength)) {
+            for (int i = *nElec_tracks-stepsBack; i > *nElec_tracks-stepsBack-numTrackSegPoints; i--) {
+                float x_center = elecX_tracks[i];
+                float y_center = elecY_tracks[i];
+                float z_center = elecZ_tracks[i];
+                
+                float dXddd = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXddu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXdud = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXduu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXudd = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXudu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXuud = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXuuu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float dYddd = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYddu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYdud = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYduu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYudd = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYudu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYuud = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYuuu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float dZddd = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZddu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZdud = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZduu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZudd = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZudu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZuud = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZuuu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float x_up = TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                float x_down = TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                float y_up   = TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                float y_down = TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                float z_up = TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                float z_down = TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                
+                float xDist = TrilinInterp(x_center, y_center, z_center, dXddd, dXddu, dXdud, dXduu, dXudd, dXudu, dXuud, dXuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                float yDist = TrilinInterp(x_center, y_center, z_center, dYddd, dYddu, dYdud, dYduu, dYudd, dYudu, dYuud, dYuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                float zDist = TrilinInterp(x_center, y_center, z_center, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                
+                float xDistInt = -0.01*dist_dX->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    xDist = xDistInt;
+                float yDistInt = 0.01*dist_dY->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    yDist = yDistInt;
+                float zDistInt = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    zDist = zDistInt;
+                
+                if ((elecX_tracks[i] <= xLow) || (elecX_tracks[i] >= xHigh) || (elecY_tracks[i] <= yLow) || (elecY_tracks[i] >= yHigh) || (elecZ_tracks[i] <= zLow) || (elecZ_tracks[i] >= zHigh)) {
                     numBadPoints_end++;
                     continue;
                 }
+                
+                if(skipZeroes && (fabs(xDist) < epsilon || fabs(yDist) < epsilon || fabs(zDist) < epsilon ) ){
+                    //std::cout << "Bad point: " << xDist << " " << yDist << " " << zDist << std::endl;
+                    numBadPoints_end++;
+                    continue;
+                    
+                }
+                
+                if(xDist>1E10 || yDist>1E10 || zDist>1E10)
+                    std::cout << "Bad distortion: " << xDist << " " << yDist << " " << zDist << std::endl;
                 
                 Point tempPoint;
                 tempPoint.x = elecX_tracks[i];
@@ -2418,8 +3117,9 @@ void eFieldCalculator::studyResults2(bool skipLaser)
                 
                 endPoints.push_back(tempPoint);
             }
-            if (numBadPoints_end > 5) continue;
+            if (numBadPoints_end > maxBadPoints) continue;
             
+              
             PCAResults results_start = DoPCA(startPoints);
             PCAResults results_end = DoPCA(endPoints);
             
@@ -2428,23 +3128,106 @@ void eFieldCalculator::studyResults2(bool skipLaser)
             Double_t endMag = sqrt(pow(results_end.eVecs[0](0),2) + pow(results_end.eVecs[0](1),2) + pow(results_end.eVecs[0](2),2));
             
             Double_t dTheta = TMath::ACos(dotProd/(startMag*endMag));
-            
-            origAngHist->Fill(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)));
+            //std::cout << dTheta << " " << std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)) << std::endl;
+            if(trackSeg == 0)
+              origAngHist->Fill(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)));
             origAngHistByX[xBin]->Fill(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)));
             origAngHistByY[yBin]->Fill(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)));
             origAngHistByZ[zBin]->Fill(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)));
             origAngMean[xBin][yBin][zBin] += std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265));
             origAngNum[xBin][yBin][zBin]  += 1.0;
+              if(std::min(180.0*dTheta/3.14159265,180.0-(180.0*dTheta/3.14159265)) < 2.5){
+                  h_xBins[trackSeg]->Fill(xBin);
+                  h_yBins[trackSeg]->Fill(yBin);
+                  h_zBins[trackSeg]->Fill(zBin);
+                  
+                  
+
+              }
+              
+              else{
+                  h_last_xBins[trackSeg]->Fill(xBin);
+                  h_last_yBins[trackSeg]->Fill(yBin);
+                  h_last_zBins[trackSeg]->Fill(zBin);
+                  
+              }
             
             PointCloud startPointsCorr;
             PointCloud endPointsCorr;
             
             Int_t numBadPoints_start_corr = 0;
-            for (int i = 0; i < numTrackSegPoints; i++) {
-                if ((elecX_tracks[i] <= 0.0) || (elecX_tracks[i] >= Lx) || (elecY_tracks[i] <= 0) || (elecY_tracks[i] >= Ly ) || (elecZ_tracks[i] <= 0) || (elecZ_tracks[i] >= Lz)) {
+              
+              
+              for (int i = firstSegment; i < numTrackSegPoints+firstSegment; i++) {
+                  //Calculate points for tri-linear interp here
+                  float x_center = elecX_tracks[i];
+                  float y_center = elecY_tracks[i];
+                  float z_center = elecZ_tracks[i];
+                  
+                  float dXddd = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXddu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXdud = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXduu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXudd = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXudu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXuud = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dXuuu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float dYddd = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYddu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYdud = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYduu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYudd = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYudu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYuud = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dYuuu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float dZddd = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZddu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZdud = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZduu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZudd = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZudu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZuud = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  float dZuuu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                  
+                  float x_up = TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                  float x_down = TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                  float y_up   = TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                  float y_down = TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                  float z_up = TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                  float z_down = TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                  
+                  float xDist = TrilinInterp(x_center, y_center, z_center, dXddd, dXddu, dXdud, dXduu, dXudd, dXudu, dXuud, dXuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  float yDist = TrilinInterp(x_center, y_center, z_center, dYddd, dYddu, dYdud, dYduu, dYudd, dYudu, dYuud, dYuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  float zDist = TrilinInterp(x_center, y_center, z_center, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                  
+                  float xDistInt = -0.01*dist_dX->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      xDist = xDistInt;
+                  float yDistInt = 0.01*dist_dY->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      yDist = yDistInt;
+                  float zDistInt = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                  if(doTH3Int)
+                      zDist = zDistInt;
+                  
+                  
+                  if ((elecX_tracks[i] <= xLow) || (elecX_tracks[i] >= xHigh) || (elecY_tracks[i] <= yLow) || (elecY_tracks[i] >= yHigh ) || (elecZ_tracks[i] <= zLow) || (elecZ_tracks[i] >= zHigh)) {
                     numBadPoints_start_corr++;
                     continue;
-                }
+                  }
+                  
+                  if(skipZeroes && (fabs(xDist) < epsilon || fabs(yDist) < epsilon || fabs(zDist) < epsilon ) ){
+                      //std::cout << "Bad point: " << xDist << " " << yDist << " " << zDist << std::endl;
+                      numBadPoints_start_corr++;
+                      continue;
+                      
+                  }
+                  
+                  if(xDist>1E10 || yDist>1E10 || zDist>1E10)
+                      std::cout << "Bad distortion: " << xDist << " " << yDist << " " << zDist << std::endl;
+                
                 
                /*
                 std::cout << counter << " " << i << "   ";
@@ -2459,9 +3242,12 @@ void eFieldCalculator::studyResults2(bool skipLaser)
                 */
                 
                 Point tempPoint;
-                tempPoint.x = elecX_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
-                tempPoint.y = elecY_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
-                tempPoint.z = elecZ_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
+               
+               
+                tempPoint.x = elecX_tracks[i] + xDist;
+                tempPoint.y = elecY_tracks[i] + yDist;
+                tempPoint.z = elecZ_tracks[i] + zDist;
+                
                 
                 std::vector<double> points_laser;
                 std::vector<double> points_cosmic;
@@ -2477,35 +3263,102 @@ void eFieldCalculator::studyResults2(bool skipLaser)
                 
                 startPointsCorr.push_back(tempPoint);
             }
-            if (numBadPoints_start_corr > 5) continue;
+            if (numBadPoints_start_corr > maxBadPoints) continue;
             
             Int_t numBadPoints_end_corr = 0;
-            for (int i = *nElec_tracks-1; i > *nElec_tracks-1-numTrackSegPoints; i--) {
-                if ((elecX_tracks[i] <= 0.0) || (elecX_tracks[i] >= Lx) || (elecY_tracks[i] <= 0) || (elecY_tracks[i] >= Ly) || (elecZ_tracks[i] <= 0) || (elecZ_tracks[i] >= Lz) ) {
+            for (int i = *nElec_tracks-stepsBack; i > *nElec_tracks-stepsBack-numTrackSegPoints; i--) {
+                //Calculate points for tri-linear interp here
+                float x_center = elecX_tracks[i];
+                float y_center = elecY_tracks[i];
+                float z_center = elecZ_tracks[i];
+                
+                float dXddd = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXddu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXdud = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXduu = corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXudd = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXudu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXuud = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dXuuu = corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float dYddd = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYddu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYdud = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYduu = corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYudd = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYudu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYuud = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dYuuu = corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float dZddd = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZddu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZdud = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZduu = corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZudd = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZudu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZuud = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)];
+                float dZuuu = corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)];
+                
+                float x_up = TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                float x_down = TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x);
+                float y_up   = TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                float y_down = TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y);
+                float z_up = TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                float z_down = TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z);
+                
+                float xDist = TrilinInterp(x_center, y_center, z_center, dXddd, dXddu, dXdud, dXduu, dXudd, dXudu, dXuud, dXuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                float yDist = TrilinInterp(x_center, y_center, z_center, dYddd, dYddu, dYdud, dYduu, dYudd, dYudu, dYuud, dYuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                float zDist = TrilinInterp(x_center, y_center, z_center, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                
+                float xDistInt = -0.01*dist_dX->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    xDist = xDistInt;
+                float yDistInt = 0.01*dist_dY->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    yDist = yDistInt;
+                float zDistInt = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(x_center), doInvCoordTransformY(y_center), doInvCoordTransformZ(z_center));
+                if(doTH3Int)
+                    zDist = zDistInt;
+                
+                if ((elecX_tracks[i] <= xLow) || (elecX_tracks[i] >= xHigh) || (elecY_tracks[i] <=yLow) || (elecY_tracks[i] >= yHigh) || (elecZ_tracks[i] <= zLow) || (elecZ_tracks[i] >= zHigh) ) {
                     numBadPoints_end_corr++;
                     continue;
                 }
                 
-                /*
-                 cout << counter << " " << i << "   ";
-                 cout << corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
+                if(skipZeroes && (fabs(xDist) < epsilon || fabs(yDist) < epsilon || fabs(zDist) < epsilon ) ){
+                    //std::cout << "Bad point: " << xDist << " " << yDist << " " << zDist << std::endl;
+                    numBadPoints_end_corr++;
+                    continue;
+                    
+                }
+                
+                if(xDist>1E10 || yDist>1E10 || zDist>1E10)
+                    std::cout << "Bad distortion: " << xDist << " " << yDist << " " << zDist << std::endl;
+                
+                
+               /* std::cout << counter << " " << i << "   ";
+                std::cout << elecX_tracks.at(i)<< " " << elecY_tracks.at(i) << " " << elecZ_tracks.at(i) << " " << std::endl;
+                std::cout << corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
                  << corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)] << " "
-                 << corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)] << endl;
-                 */
+                << corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)] << std::endl;
+                */
                 
                 Point tempPoint;
-                tempPoint.x = elecX_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dx[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
-                tempPoint.y = elecY_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dy[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
-                tempPoint.z = elecZ_tracks[i] + TrilinInterp(elecX_tracks[i],elecY_tracks[i],elecZ_tracks[i],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)],corr_Dz[(Int_t)TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)][(Int_t)TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)][(Int_t)TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)],TMath::Floor(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Ceil(elecX_tracks[i]*numDivisions_x/Lx)*(Lx/numDivisions_x),TMath::Floor(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Ceil(elecY_tracks[i]*numDivisions_y/Ly)*(Ly/numDivisions_y),TMath::Floor(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z),TMath::Ceil(elecZ_tracks[i]*numDivisions_z/Lz)*(Lz/numDivisions_z));
+                
+                tempPoint.x = elecX_tracks[i] + xDist;
+                tempPoint.y = elecY_tracks[i] + yDist;
+                tempPoint.z = elecZ_tracks[i] + zDist;
+             
+
                 
                 endPointsCorr.push_back(tempPoint);
             }
-            if (numBadPoints_end_corr > 5) continue;
+            if (numBadPoints_end_corr > maxBadPoints) continue;
             
             PCAResults results_start_corr = DoPCA(startPointsCorr);
             PCAResults results_end_corr = DoPCA(endPointsCorr);
@@ -2517,17 +3370,22 @@ void eFieldCalculator::studyResults2(bool skipLaser)
             Double_t dThetaCorr = TMath::ACos(dotProdCorr/(startMagCorr*endMagCorr));
             
             //cout << "    ANGLE:  " << min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265));
-            
-            corrAngHist->Fill(std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265)));
+            if(trackSeg == 0)
+               corrAngHist->Fill(std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265)));
             corrAngHistByX[xBin]->Fill(std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265)));
             corrAngHistByY[yBin]->Fill(std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265)));
             corrAngHistByZ[zBin]->Fill(std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265)));
             
             corrAngMean[xBin][yBin][zBin] += std::min(180.0*dThetaCorr/3.14159265,180.0-(180.0*dThetaCorr/3.14159265));
             corrAngNum[xBin][yBin][zBin]  += 1.0;
+              
+            elecX_tracks.clear();
+            elecY_tracks.clear();
+            elecZ_tracks.clear();
            
-        }
-    }
+        }//end of loop over track segments
+       }//end of if number of track points
+    } //end of loop over track segments
     origAngHist->Scale(1.0/origAngHist->Integral());
     corrAngHist->Scale(1.0/corrAngHist->Integral());
     
@@ -2539,6 +3397,7 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     TH3F* meansOrig = new TH3F("meansOrig","",dist_dX->GetNbinsX(),0,25.0,dist_dX->GetNbinsY(),0,25.0,dist_dX->GetNbinsZ(),0,100.0);
     TH3F* meansCorr = new TH3F("meansCorr","",dist_dX->GetNbinsX(),0,25.0,dist_dX->GetNbinsY(),0,25.0,dist_dX->GetNbinsZ(),0,100.0);
     TH3F* meansDiff = new TH3F("meansDiff","",dist_dX->GetNbinsX(),0,25.0,dist_dX->GetNbinsY(),0,25.0,dist_dX->GetNbinsZ(),0,100.0);
+    TH3F* numTracks = new TH3F("numTracks","",dist_dX->GetNbinsX(),0,25.0,dist_dX->GetNbinsY(),0,25.0,dist_dX->GetNbinsZ(),0,100.0);
     
     for (int x = 0; x <nCalibDivisions_x+1; x++ ) {
         for (int y = 0; y <nCalibDivisions_y+1; y++ ) {
@@ -2553,8 +3412,11 @@ void eFieldCalculator::studyResults2(bool skipLaser)
                     origMean = (double)origAngMean[x][y][z]/origAngNum[x][y][z];
                     meansOrig->SetBinContent(x+1, y+1, z+1, origMean);
                 }
-                double meanDiff = origMean - corrMean;
+                double meanDiff = -1.0;
+                if(corrMean > 0.0 && origMean > 0.0)
+                   meanDiff = origMean - corrMean;
                 meansDiff->SetBinContent(x+1, y+1, z+1, meanDiff);
+                numTracks->SetBinContent(x+1, y+1, z+1, corrAngNum[x][y][z]);
                 
                 
             }
@@ -2573,6 +3435,108 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     for(int i=0; i < numDivisions_z; ++i){
         draw1DPlot(origAngHistByZ[i], corrAngHistByZ[i], i, "Angle", "AnglePlots/combinedAngHistInZ", axisType::zAxis);
     }
+    
+    for(int i=0; i<maxTrackSegments; ++i){
+        TCanvas *can = new TCanvas(Form("can"),"",900,900);
+        can->cd();
+        h_xBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_xBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_xBins[i]->GetXaxis()->SetTitle("X Voxel");
+        h_xBins[i]->GetYaxis()->SetTitle("Number of Tracks");
+        h_xBins[i]->SetTitle("Start Point Voxel");
+        h_xBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_xBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_xBins[i]->SetLineWidth(2.0);
+        h_xBins[i]->SetLineColor(kBlack);
+        h_xBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/StartXBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+        h_yBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_yBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_xBins[i]->GetXaxis()->SetTitle("Y Voxel");
+        h_xBins[i]->GetYaxis()->SetTitle("Number of Tracks");
+        h_xBins[i]->SetTitle("Start Point Voxel");
+        h_yBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_yBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_yBins[i]->SetLineWidth(2.0);
+        h_yBins[i]->SetLineColor(kBlack);
+        h_yBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/StartYBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+        h_zBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_zBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_xBins[i]->GetXaxis()->SetTitle("Z Voxel");
+        h_xBins[i]->GetYaxis()->SetTitle("Number of Tracks");
+        h_xBins[i]->SetTitle("Start Point Voxel");
+        h_zBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_zBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_zBins[i]->SetLineWidth(2.0);
+        h_zBins[i]->SetLineColor(kBlack);
+        h_zBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/StartZBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+        can->cd();
+        h_last_xBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_last_xBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_last_xBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_last_xBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_last_xBins[i]->SetLineWidth(2.0);
+        h_last_xBins[i]->SetLineColor(kBlack);
+        h_last_xBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/LastXBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+        h_last_yBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_last_yBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_last_yBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_last_yBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_last_yBins[i]->SetLineWidth(2.0);
+        h_last_yBins[i]->SetLineColor(kBlack);
+        h_last_yBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/LastYBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+        h_last_zBins[i]->GetXaxis()->SetTitleOffset(0.95);
+        h_last_zBins[i]->GetXaxis()->SetTitleSize(0.045);
+        h_last_zBins[i]->GetYaxis()->SetTitleOffset(0.95);
+        h_last_zBins[i]->GetYaxis()->SetTitleSize(0.045);
+        h_last_zBins[i]->SetLineWidth(2.0);
+        h_last_zBins[i]->SetLineColor(kBlack);
+        h_last_zBins[i]->Draw("hist");
+        can->SaveAs(Form("AnglePlots/LastZBin_%d.png", i));
+        can->Update();
+        can->Clear();
+        
+    }
+    
+    TCanvas *can0 = new TCanvas(Form("can0"),"",900,900);
+    can0->cd();
+    double scale = 1.0;
+    h_xBins[0]->Sumw2();
+    h_last_xBins[0]->Sumw2();
+    if(h_xBins[0]->Integral() > 0.0)
+        scale = 1 / (h_xBins[0]->Integral());
+    if(h_last_xBins[0]->Integral() > 0.0)
+        scale = 1 / (h_last_xBins[0]->Integral());
+    h_xBins[0]->Scale(scale);
+    h_last_xBins[0]->Scale(scale);
+    h_xBins[0]->SetMarkerStyle(kFullDotMedium);
+    h_xBins[0]->SetMarkerColor(kRed+2);
+    h_last_xBins[0]->SetMarkerStyle(kFullDotMedium);
+    h_last_xBins[0]->SetMarkerColor(kBlue+2);
+    h_xBins[0]->Draw("E0");
+    h_last_xBins[0]->Draw("E0 same");
+    can0->SaveAs(Form("AnglePlots/XBinByDeflection.png"));
+    can0->Update();
+    can0->Clear();
     
     TCanvas *c_orig = new TCanvas(Form("can_orig"),"",900,900);
     c_orig->cd();
@@ -2618,6 +3582,8 @@ void eFieldCalculator::studyResults2(bool skipLaser)
     origAngHist->Draw("HIST");
     corrAngHist->Draw("HISTsame");
     std::cout << corrAngHist->GetMean() << std::endl;
+    std::cout << origAngHist->GetMean() << std::endl;
+    std::cout << origAngHist->Integral() << std::endl;
     leg_combined->Draw("same");
     origAngHist->Draw("AXISsame");
     origAngHist->SetMaximum(1.1*std::max(origAngHist->GetMaximum(),corrAngHist->GetMaximum()));
@@ -2635,37 +3601,428 @@ void eFieldCalculator::compareMeans(){
     
     TFile *meansCosmicAndLaser = new TFile("MeansCosmicAndLaser.root");
     TH3F* diff_cosmicAndLaser = (TH3F*) meansCosmicAndLaser->Get("meansDiff");
+    TH3F* num_tracks = (TH3F*) meansCosmicAndLaser->Get("numTracks");
     
-    TFile *file3D = new TFile("goodStartPoints.root", "RECREATE");
-    TH3F *hist_3D = new TH3F("hist_3D","",diff_cosmic->GetNbinsX(),0,25.0,diff_cosmic->GetNbinsY(),0,25.0,diff_cosmic->GetNbinsZ(),0,100.0);
+    TFile *file3D = new TFile("GoodStartPoints.root", "RECREATE");
+    TH3F *hist_3D_good = new TH3F("hist_3D_good","",diff_cosmic->GetNbinsX(),0,25.0,diff_cosmic->GetNbinsY(),0,25.0,diff_cosmic->GetNbinsZ(),0,100.0);
+    TH3F *hist_3D_no_good = new TH3F("hist_3D_No_good","",diff_cosmic->GetNbinsX(),0,25.0,diff_cosmic->GetNbinsY(),0,25.0,diff_cosmic->GetNbinsZ(),0,100.0);
     
     for(int x = 1; x < diff_cosmic->GetNbinsX()+1; ++x){
         for(int y = 1; y < diff_cosmic->GetNbinsY()+1; ++y){
             for(int z = 1; z < diff_cosmic->GetNbinsZ()+1; ++z){
                double diffCosmic         = diff_cosmic->GetBinContent(x,y,z);
                double diffCosmicAndLaser = diff_cosmicAndLaser->GetBinContent(x,y,z);
+               // if(diffCosmic > 0.0 && diffCosmicAndLaser > 0.0 && diffCosmicAndLaser < diffCosmic)
+               // std::cout << x << " " << y << " " << z << " " << diffCosmic << " " << diffCosmicAndLaser << std::endl;
                if(diffCosmicAndLaser > diffCosmic)
-                   hist_3D->SetBinContent(x,y,z,1.0);
+                   hist_3D_good->SetBinContent(x,y,z,1.0);
+               if(diffCosmicAndLaser < diffCosmic)
+                   hist_3D_no_good->SetBinContent(x,y,z,1.0);
             }
        }
     
     
    }
+    
+    for(int k = 1; k <= hist_3D_good->GetNbinsZ(); k++){
+        TH2F good_voxels_XY(Form("good_voxels_XY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F no_good_voxels_XY(Form("no_good_voxels_XY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F num_tracks_XY(Form("num_tracks_XY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        for(int i = 1; i <= hist_3D_good->GetNbinsX(); i++){
+            for(int j=1; j<= hist_3D_good->GetNbinsY(); j++){
+                good_voxels_XY.SetBinContent(i,j,hist_3D_good->GetBinContent(i,j,k));
+                no_good_voxels_XY.SetBinContent(i,j,hist_3D_no_good->GetBinContent(i,j,k));
+                num_tracks_XY.SetBinContent(i,j,num_tracks->GetBinContent(i,j,k));
+            }
+        }
+        drawPlanarPlot(good_voxels_XY, k, "Improved by Laser", "good_voxels_XY", axisType::zAxis);
+        drawPlanarPlot(no_good_voxels_XY, k, "Made worse by Laser", "no_good_voxels_XY", axisType::zAxis);
+        drawPlanarPlot(num_tracks_XY, k, "Number of Track Start Points", "num_tracks_XY", axisType::zAxis);
+    }
+    
+    for(int j = 1; j <= hist_3D_good->GetNbinsY(); j++){
+        TH2F good_voxels_ZX(Form("good_voxels_ZX_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F no_good_voxels_ZX(Form("no_good_voxels_ZX_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F num_tracks_ZX(Form("num_tracks_ZX_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        for(int i = 1; i <= hist_3D_good->GetNbinsX(); i++){
+            for(int k=1; k<= hist_3D_good->GetNbinsZ(); k++){
+                good_voxels_ZX.SetBinContent(k,i,hist_3D_good->GetBinContent(i,j,k));
+                no_good_voxels_ZX.SetBinContent(k,i,hist_3D_no_good->GetBinContent(i,j,k));
+                num_tracks_ZX.SetBinContent(k,i,num_tracks->GetBinContent(i,j,k));
+            }
+        }
+        drawPlanarPlot(good_voxels_ZX, j, "Improved by Laser", "good_voxels_ZX", axisType::yAxis);
+        drawPlanarPlot(no_good_voxels_ZX, j, "Made worse by Laser", "no_good_voxels_ZX", axisType::yAxis);
+        drawPlanarPlot(num_tracks_ZX, j, "Number of Track Start Points", "num_tracks_ZX", axisType::yAxis);
+    }
+    
     file3D->Write();
     file3D->Close();
 
 }
 
+void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
+    
+    gStyle->SetOptStat(0);
+    gStyle->SetTitleFontSize(0.15);
+    gStyle->SetLabelSize(0.05,"xyz");
+    gStyle->SetTitleSize(0.05,"xyz");
+    gStyle->SetPadTopMargin(0.12);
+    gStyle->SetPadLeftMargin(0.11);
+    gStyle->SetPadRightMargin(0.15);
+    gStyle->SetPadBottomMargin(0.12);
+    gStyle->SetLegendTextSize(0.04);
+    
+    const double epsilon = 1e-10;
+    const int    pointReduction = 10;
+    int badPoints_up = 0;
+    int badPoints_down = 0;
+    
+    gInterpreter->GenerateDictionary("vector<TVector3>","TVector3.h");
+    gInterpreter->GenerateDictionary("vector<vector<vector<TVector3>>>","TVector3.h");
+    
+    // Input
+    TChain *RecoTrackTree = new TChain("tracks");
+    TChain *LaserInfoTree = new TChain("lasers");
+    RecoTrackTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7267.root");
+    LaserInfoTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7267.root");
+    
+    // Laser truth Info
+    TVector3 EntryPoint;
+    TVector3 *pEntryPoint = &EntryPoint;
+    TVector3 ExitPoint;
+    TVector3 *pExitPoint = &ExitPoint;
+    
+    LaserInfoTree->SetBranchAddress("entry", &pEntryPoint);
+    LaserInfoTree->SetBranchAddress("exit", &pExitPoint);
+    
+    // Track Info
+    int EventNumber;
+    std::vector<TVector3> TrackSamples;
+    std::vector<TVector3>* pTrackSamples = &TrackSamples;
+    
+    RecoTrackTree->SetBranchAddress("track", &pTrackSamples);
+    RecoTrackTree->SetBranchAddress("event", &EventNumber);
+    
+    // Read Distortion
+    //TFile *InFile = new TFile("output_hists_data_200k_Aug3.root","READ");
+    //TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicAndLaser.root", "READ");
+    TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnly.root", "READ");
+    //TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsLaserOnly.root", "READ");
+    
+    //TFile *InFile = new TFile("RecoCorr-N3-S50-Data-2side-Anode.root", "READ");
+    /*
+    TH3F *Dx = (TH3F*) InFile->Get("Reco_Displacement_X");
+    TH3F *Dy = (TH3F*) InFile->Get("Reco_Displacement_Y");
+    TH3F *Dz = (TH3F*) InFile->Get("Reco_Displacement_Z");
+    */
+    
+    TH3F *Dx = (TH3F*) InFile->Get("combined_dX");
+    TH3F *Dy = (TH3F*) InFile->Get("combined_dY");
+    TH3F *Dz = (TH3F*) InFile->Get("combined_dZ");
+    /*
+    TH3F *Dx_err = (TH3F*) InFile->Get("combined_dX_Error");
+    TH3F *Dy_err = (TH3F*) InFile->Get("combined_dY_Error");
+    TH3F *Dz_err = (TH3F*) InFile->Get("combined_dZ_Error");
+    */
+    double corr_Dx[Dx->GetNbinsX()][Dx->GetNbinsY()][Dx->GetNbinsZ()];
+    double corr_Dy[Dx->GetNbinsX()][Dx->GetNbinsY()][Dx->GetNbinsZ()];
+    double corr_Dz[Dx->GetNbinsX()][Dx->GetNbinsY()][Dx->GetNbinsZ()];
+    
+    for (int x = 0; x <Dx->GetNbinsX(); x++ ) {
+        for (int y = 0; y <Dx->GetNbinsY(); y++ ) {
+            for (int z = 0; z <Dx->GetNbinsZ(); z++ ) {
+                corr_Dx[x][y][z] = 0.0;
+                corr_Dy[x][y][z] = 0.0;
+                corr_Dz[x][y][z] = 0.0;
+                
+            }
+        }
+    }
+    
+    
+    // Define number of tracks
+    Int_t nElecX_tracks;
+    int nElec_tracks;
+    std::vector<double> elecX;
+    std::vector<double> elecY;
+    std::vector<double> elecZ;
+    
+    // Define histograms for residuals
+    TCanvas *c1 = new TCanvas("c1","D Map at Central Z",600,400);
+    TH1F *h1 = new TH1F("h1","Residuals of track hits before correction",100,-1,19);
+    TH1F *h2 = new TH1F("h2","Residuals of track hits after correction",100,-1,19);
+    TH1F *h_IntX = new TH1F("IntX", "Difference in Interpolation #Delta X", 250, -5.0, 5.0);
+    TH1F *h_IntY = new TH1F("IntX", "Difference in Interpolation #Delta Y", 250, -5.0, 5.0);
+    TH1F *h_IntZ = new TH1F("IntX", "Difference in Interpolation #Delta Z", 250, -5.0, 5.0);
+    
+    TH1F *h_trkX = new TH1F("trkX", "X Track Points", nCalibDivisions_x+1,xMin,xMax);
+    TH1F *h_trkY = new TH1F("trkY", "Y Track Points", nCalibDivisions_y+1,yMin,yMax);
+    TH1F *h_trkZ = new TH1F("trkZ", "Z Track Points", nCalibDivisions_z+1,zMin,zMax);
+    
+    TH2F *h_tracksXZ = new TH2F("tracksXZ", "Tracks XZ", nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+    TH2F *h_tracksZY = new TH2F("tracksXZ", "Tracks XZ", nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_y+1,yMin,yMax);
+    TH3F *h_tracks   = new TH3F("tracks", "Tracks", nCalibDivisions_x+1,xMin,xMax, nCalibDivisions_y+1,yMin,yMax, nCalibDivisions_z+1,zMin,zMax);
+    
+    TFile *OutFile = new TFile("LaserTracksData.root", "RECREATE");
+    TTree *T_tracks = new TTree("SpaCEtree_tracks","SpaCEtree_tracks");
+    T_tracks->Branch("elecX_tracks",&elecX);
+    T_tracks->Branch("elecY_tracks",&elecY);
+    T_tracks->Branch("elecZ_tracks",&elecZ);
+    T_tracks->Branch("nElec_tracks",&nElec_tracks,"nElec_tracks/I");
+    T_tracks->SetDirectory(OutFile);
+    
+    TF1 *f1 = new TF1("chi2L", "ROOT::Math::chisquared_pdf(x, [0])", 0, 10.0);
+    
+    f1->SetParameters(1,2);
+    f1->SetLineColor(kBlack);
+    f1->SetLineWidth(2);
+    f1->SetLineStyle(9);
+    
+    // Loop over all tree entries
+    if (LaserInfoTree->GetEntries() == RecoTrackTree->GetEntries()) {
+        for (Size_t id = 0; id < RecoTrackTree->GetEntries(); id++) {
+            
+            RecoTrackTree->GetEntry(id);
+            LaserInfoTree->GetEntry(id);
+            
+            TVector3 TrackVec = ExitPoint - EntryPoint;
+            double LTrack = TrackVec.Mag();
+            
+            nElecX_tracks = TrackSamples.size();
+            elecX.clear();
+            elecY.clear();
+            elecZ.clear();
+            nElec_tracks= TMath::Floor(nElecX_tracks/pointReduction);
+            
+            for(int i = 0; i < nElecX_tracks; i++){
+                
+                // Pre-Correction
+                TVector3 HitVec = TrackSamples[i] - EntryPoint;
+                TVector3 CrossProduct = TrackVec.Cross(HitVec);
+                h1->Fill(CrossProduct.Mag() / LTrack);
+                
+                double xPoint = TrackSamples[i][0];
+                double yPoint = TrackSamples[i][1];
+                double zPoint = TrackSamples[i][2];
+                
+                
+                if(i % pointReduction == 0){
+                  elecX.push_back(doCoordTransformX(xPoint));
+                  elecY.push_back(doCoordTransformY(yPoint));
+                  elecZ.push_back(doCoordTransformZ(zPoint));
+                  h_trkX->Fill(xPoint);
+                  h_trkY->Fill(yPoint);
+                  h_trkZ->Fill(zPoint);
+                }
+                
+                double xLength = xMax - xMin;
+                double yLength = yMax - yMin;
+                double zLength = zMax - zMin;
+                
+                //std::cout << (Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength) << " " << (Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)<< " " << (Int_t)TMath::Floor(zPoint*Dx->GetNbinsZ()/zLength) << std::endl;
+                
+                //std::cout << "Dx: " <<  corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dx->GetNbinsZ()/zLength)] << std::endl;
+                
+                float dXddd = corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXddu = corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXdud = corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXduu = corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXudd = corr_Dx[(Int_t)TMath::Ceil(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXudu = corr_Dx[(Int_t)TMath::Ceil(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXuud = corr_Dx[(Int_t)TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dx->GetNbinsZ()/zLength)];
+                float dXuuu = corr_Dx[(Int_t)TMath::Ceil(xPoint*Dx->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dx->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dx->GetNbinsZ()/zLength)];
+                
+              //  std::cout << "Dy: " <<  corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dy->GetNbinsZ()/zLength)] << std::endl;
+                
+                float dYddd = corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYddu = corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYdud = corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYduu = corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYudd = corr_Dy[(Int_t)TMath::Ceil(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYudu = corr_Dy[(Int_t)TMath::Ceil(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYuud = corr_Dy[(Int_t)TMath::Floor(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dy->GetNbinsZ()/zLength)];
+                float dYuuu = corr_Dy[(Int_t)TMath::Ceil(xPoint*Dy->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dy->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dy->GetNbinsZ()/zLength)];
+                
+               // std::cout << "Dz: " <<  corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength)] << std::endl;
+                
+                float dZddd = corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZddu = corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZdud = corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZduu = corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZudd = corr_Dz[(Int_t)TMath::Ceil(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZudu = corr_Dz[(Int_t)TMath::Ceil(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZuud = corr_Dz[(Int_t)TMath::Floor(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Floor(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)];
+                float dZuuu = corr_Dz[(Int_t)TMath::Ceil(xPoint*Dz->GetNbinsX()/xLength)][(Int_t)TMath::Ceil(yPoint*Dz->GetNbinsY()/yLength)][(Int_t)TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)];
+                
+                float x_up   = TMath::Floor(xPoint*Dx->GetNbinsX()/xLength)*(Dx->GetNbinsX()/xLength)*100.0;
+                float x_down = TMath::Ceil(xPoint*Dx->GetNbinsX()/xLength)*(Dx->GetNbinsX()/xLength)*100.0;
+                float y_up   = TMath::Floor(yPoint*Dy->GetNbinsY()/yLength)*(Dy->GetNbinsY()/yLength)*100.0;
+                float y_down = TMath::Ceil(yPoint*Dy->GetNbinsY()/yLength)*(Dy->GetNbinsY()/yLength)*100.0;
+                float z_up   = TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength)*(Dz->GetNbinsZ()/zLength)*100.0;
+                float z_down = TMath::Ceil(zPoint*Dz->GetNbinsZ()/zLength)*(Dz->GetNbinsZ()/zLength)*100.0;
+                
+                //std::cout << yPoint << " " << TMath::Ceil((yPoint)*Dy->GetNbinsY()/yLength) << " " <<TMath::Floor((yPoint)*Dy->GetNbinsY()/yLength) << " " << (Dy->GetNbinsY()/yLength) << std::endl;
+                //std::cout << TMath::Floor(zPoint*Dz->GetNbinsZ()/zLength) << " " << (Dz->GetNbinsZ()/zLength) << std::endl;
+                //std::cout << xPoint << " " << yPoint << " " << zPoint << std::endl;
+               // std::cout << x_up << " " << x_down << " " << y_up << " " << y_down << " " << z_up << " " << z_down << std::endl;
+                
+                // Correction
+                double distX = 0.0;
+                double distY = 0.0;
+                double distZ = 0.0;
+                
+                double distXRoot = Dx->Interpolate(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                double distYRoot = Dy->Interpolate(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                double distZRoot = Dz->Interpolate(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                
+                double distXTriLin = TrilinInterp(xPoint, yPoint, zPoint, dXddd, dXddu, dXdud, dXduu, dXudd, dXudu, dXuud, dXuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                double distYTriLin = TrilinInterp(xPoint, yPoint, zPoint, dYddd, dYddu, dYdud, dYduu, dYudd, dYudu, dYuud, dYuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                double distZTriLin = TrilinInterp(xPoint, yPoint, zPoint, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
+                
+                if(doTriLin){
+                    distX = distXTriLin;
+                    distY = distYTriLin;
+                    distZ = distZTriLin;
+                }
+                
+                else{
+                   distX = distXRoot;
+                   distY = distYRoot;
+                   distZ = distZRoot;
+                }
+                h_IntX->Fill(distXRoot - distXTriLin);
+                h_IntY->Fill(distYRoot - distYTriLin);
+                h_IntZ->Fill(distZRoot - distZTriLin);
+                
+               // std::cout << distXRoot << " " << distXTriLin << " " << distYRoot << " " << distYTriLin << " " << distZRoot << " " << distZTriLin << std::endl;
+                
+                // Define corrected hit
+                TVector3 newHit;
+                
+                // If the correction doesn't exist, then skip this hit
+                if(distX>1E10 || distY>1E10 || distZ>1E10){
+                    ++badPoints_up;
+                    continue;
+                }
+                
+                // If the correction doesn't exist, then skip this hit
+                else if(fabs(distX) < epsilon || fabs(distY) < epsilon || fabs(distZ) < epsilon){
+                    ++badPoints_down;
+                    continue;
+                }
+                
+                // Otherwise, apply the correction
+                else{
+                    TVector3 dist(distX, distY, distZ);
+                    newHit = TrackSamples[i] + dist;
+                    
+                }
+                
+                // After-Correction
+                TVector3 newHitVec = newHit - EntryPoint;
+                TVector3 newCrossProduct = TrackVec.Cross(newHitVec);
+                h2->Fill(newCrossProduct.Mag() / LTrack);
+                h_tracksXZ->Fill(TrackSamples[i][2],TrackSamples[i][0]);
+                h_tracksZY->Fill(TrackSamples[i][2],TrackSamples[i][1]);
+                h_tracks->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                
+            } //end of loop over track pointss
+            
+            T_tracks->Fill();
+            
+        }
+    }
+    else{
+        std::cout<<"The laser info and the track info do not match!"<<std::endl;
+    }
+    
+    h1->SetLineColor(2);
+    h1->SetLineWidth(2);
+    
+    h2->SetLineColor(4);
+    h2->SetLineWidth(2);
+    
+    std::string Title;
+    if(doTriLin)
+        Title = "Residual of Track Hits before and after Cosmic Correction (Tri Linear Interpolation)";
+    else
+        Title = "Residual of Track Hits before and after Merged Correction (TH3 Interpolation)";
+    h2->SetTitle(Title.c_str());
+    h2->GetXaxis()->SetTitle("Distance to the true track [cm]");
+    h2->GetYaxis()->SetTitle("Entries / 0.2 cm");
+    h2->GetYaxis()->SetRangeUser(0.0, 1.0);
+    h1->GetYaxis()->SetRangeUser(0.0, 1.0);
+    double scale = 1.0;
+    if(h1->Integral() > 0)
+        scale = 1 / (h1->Integral());
+    h1->Scale(scale);
+    if(h2->Integral() > 0)
+        scale = 1 / (h2->Integral());
+    h2->Scale(scale);
+    
+    h2->Draw("hist");
+    h1->Draw("hist SAME");
+    f1->Draw("SAME");
+    h2->GetYaxis()->SetRangeUser(0.0, 0.5);
+    h1->GetYaxis()->SetRangeUser(0.0, 0.5);
+    
+    TLegend *legend = new TLegend(0.4,0.65,0.8,0.85);
+    legend->AddEntry(h1,"Residual before correction");
+    legend->AddEntry(h2,"Residual after correction");
+    legend->Draw("SAME");
+    
+    
+    c1->Update();
+    c1->SaveAs("TrackResiduals.pdf");
+    
+    std::cout << "Bad points (too big): " << badPoints_up << std::endl;
+    std::cout << "Bad points (too small): " << badPoints_down << std::endl;
+    std::cout << "Mean after correction: " <<  h2->GetMean() << std::endl;
+    
+    c1->Clear();
+    h_trkX->GetXaxis()->SetTitle("Track Point (cm)");
+    h_trkX->GetYaxis()->SetTitle("Number of Points");
+    h_trkX->Draw("hist");
+    c1->Update();
+    c1->SaveAs("TrackX.pdf");
+    
+    c1->Clear();
+    h_trkY->GetXaxis()->SetTitle("Track Point (cm)");
+    h_trkY->GetYaxis()->SetTitle("Number of Points");
+    h_trkY->Draw("hist");
+    c1->Update();
+    c1->SaveAs("TrackY.pdf");
+    
+    c1->Clear();
+    h_trkZ->GetXaxis()->SetTitle("Track Point (cm)");
+    h_trkZ->GetYaxis()->SetTitle("Number of Points");
+    h_trkZ->Draw("hist");
+    c1->Update();
+    c1->SaveAs("TrackZ.pdf");
+    
+    drawPlanarPlot(h_tracksXZ, 0, "Tracks", "LaserTracks", axisType::yAxis);
+    drawPlanarPlot(h_tracksZY, 0, "Tracks", "LaserTracks", axisType::xAxis);
+   
+    OutFile->Write();
+    OutFile->Close();
+    
+    
+}
+
 int main(int argc, char *argv[]){
 
   eFieldCalculator *calculator = new eFieldCalculator();
-  //calculator->compareCalib(true);
- // calculator->compareCalibZXPlane(true);
+  //calculator->compareCalib(false);
+  //calculator->compareCalibZXPlane(true);
   //calculator->compareTruth(false);
-  //calculator->combineMaps(true, true);
+   // calculator->doFits();
+  //  calculator->combineWeightedMaps();
+  //  calculator->combineMaps(true, true, false);
   //  calculator->compareFaces(true);
-    calculator->studyResults2(true);
-  //  calculator->compareMeans();
+  //  calculator->studyResults2(false);
+  // calculator->compareMeans();
+    calculator->Residual_afterTrackCorr(false);
 
   return 0;
 } //end of main
