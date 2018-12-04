@@ -85,7 +85,7 @@ class eFieldCalculator{
 
   public:
      
-     eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = true;}
+    eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = false; driftSign = 1.0;}
      
      ~eFieldCalculator(){}
     
@@ -103,7 +103,7 @@ class eFieldCalculator{
      
      bool goodLaser(double value, double error){return (value < 1000.0 && error > 0.0 && isRelErrorSmall(value, error));}
      
-     bool goodCosmic(double value, double error){return (error > 0.0 && isRelErrorSmall(value, error) );}
+     bool goodCosmic(double value, double error){return (isRelErrorSmall(value, error) );}
      
      bool isRelErrorSmall(double value, double error){return (useRelErrorCut ? (fabs(error/value) < minRelErr) : true);}
      
@@ -137,11 +137,15 @@ class eFieldCalculator{
     
     void  draw1DPlot(TH1F *histOne, TH1F *histTwo, int planeNum, const char *label, const char *filename, axisType axis, double zMax = 0.0);
      
-    void combineMaps(bool isData = false, bool skipLaser = true, bool skipCosmic = true);
+    void combineMaps(bool isData, bool skipLaser, bool skipCosmic);
+    
+    void combineMaps(int lowX = 0, int highX = 300, int lowY = 0, int highY = 300, int lowZ = 21, int highZ = 87, bool isData = true);
     
     void  compareFaces(bool isData = false);
     
     void combineWeightedMaps();
+    
+    void MakeDistorionTree();
     
     float LinInterp(float x, float x1, float x2, float q00, float q01);
     
@@ -152,7 +156,7 @@ class eFieldCalculator{
     
     void compareMeans();
 
-    void studyResults2(bool skipLaser = true);
+    std::vector<double> studyResults2(std::string inputMapFileName = "IterativeCosmicMap.root", std::string plotName = "NoPlot.png");
     
     void Residual_afterTrackCorr(bool doTriLin = false);
     
@@ -185,8 +189,12 @@ class eFieldCalculator{
      const double yMax = (TPC_Y/Ly)*((Ly/2.0)+Ly/(2.0*((double)nCalibDivisions_y)));
      const double zMin = -1.0*(TPC_Z/Lz)*Lz/(2.0*((double)nCalibDivisions_z));
      const double zMax = (TPC_Z/Lz)*(Lz+Lz/(2.0*((double)nCalibDivisions_z)));
+    
+    
      
-     bool useRelErrorCut; 
+     bool useRelErrorCut;
+    
+    double driftSign;
 
      TH3F *laser_dX;
      TH3F *laser_dY;
