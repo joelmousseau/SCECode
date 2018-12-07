@@ -2549,7 +2549,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     std::string inputTruth;
     std::string outputName;
     if(isData)
-        outputName = "PleaseWork.root";
+        outputName = "MergedMapsSmoothCosmicAndLaser.root";
     else
         outputName = "MergedMapsSmoothCosmicAndLaserMC.root";
     
@@ -2612,6 +2612,12 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 bool useCosmic = false;
                 bool useLaser  = false;
                 bool goodAgreement = false;
+                bool atXLowerBoundary = false;
+                bool atYLowerBoundary = false;
+                bool atZLowerBoundary = false;
+                bool atXUpperBoundary = false;
+                bool atYUpperBoundary = false;
+                bool atZUpperBoundary = false;
                 double cosmic_x_correction = -i*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i);
                 double laser_x_correction  = -i*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i);
                 
@@ -2624,7 +2630,69 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 //std::cout << "Cosmic: " << cosmic_x_correction << " Laser: " << laser_x_correction << std::endl;
                 useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k) );
                 useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
-                if(useLaser){
+                atXLowerBoundary = (i == lowX && j > lowY && j < highY && k > lowZ && k < highZ);
+                atYLowerBoundary = (j == lowY && i > lowX && i < highX && k > lowZ && k < highZ);
+                atZLowerBoundary = (k == lowZ && i > lowX && i < highX && j > lowY && j < highY);
+                
+                atXUpperBoundary = (i == highX && j > lowY && j < highY && k > lowZ && k < highZ);
+                atYUpperBoundary = (j == highY && i > lowX && i < highX && k > lowZ && k < highZ);
+                atZUpperBoundary = (k == highZ && i > lowX && i < highX && j > lowY && j < highY);
+
+                if(atXLowerBoundary || atXUpperBoundary){
+                    numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i+1,j,k) -(i+1)*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) +  laser_dX->GetBinContent(i+1,j,k)  - (i+1)*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) + cosmic_dX->GetBinContent(i-1,j,k) - (i-1)*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) + laser_dX->GetBinContent(i-1,j,k) - (i-1)*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) );
+                    denominator = 6.0;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atYLowerBoundary || atYUpperBoundary){
+                    numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j+1,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j+1,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j-1,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j-1,k) + laser_x_correction );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atZLowerBoundary || atZUpperBoundary){
+                    numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j,k+1) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k+1) + laser_x_correction + cosmic_dX->GetBinContent(i,j,k-1) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k-1) + laser_x_correction );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                
+                else if(useLaser){
                     numerator = (laser_dX->GetBinContent(i,j,k) + laser_x_correction);
                     denominator = 1.0;
                     if(isData){
@@ -2672,8 +2740,62 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                     std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
                 
                 useCosmic = goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k) );
-                useLaser  = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
-                if(useLaser){
+                useLaser  = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && i < highX && i > lowX && k > lowZ && k < highZ && j > lowY && j < highY);
+                
+                if(atXLowerBoundary || atXUpperBoundary){
+                    numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i+1,j,k) + laser_dY->GetBinContent(i+1,j,k) + cosmic_dY->GetBinContent(i-1,j,k) + laser_dY->GetBinContent(i-1,j,k) );
+                    denominator = 6.0;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atYLowerBoundary || atYUpperBoundary){
+                    numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i,j+1,k) + laser_dY->GetBinContent(i,j+1,k) + cosmic_dY->GetBinContent(i,j-1,k) + laser_dY->GetBinContent(i,j-1,k) );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atZLowerBoundary || atZUpperBoundary){
+                    numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i,j,k+1) + laser_dY->GetBinContent(i,j,k+1) + cosmic_dY->GetBinContent(i,j,k-1) + laser_dY->GetBinContent(i,j,k-1) );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(useLaser){
                     numerator = laser_dY->GetBinContent(i,j,k);
                     denominator = 1.0;
                     if(!isData){
@@ -2701,9 +2823,6 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                     }
                 }
                 
-                //I think this needs to be flipped
-                
-                
                 //use the MC.
                 else{
                     //std::cout << laser_dX->GetBinContent(i,j,k) << " " << laser_dX_err->GetBinContent(i,j,k) << std::endl;
@@ -2723,8 +2842,61 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                     std::cout << "Denomiantor for combination == 0! This should not happen!" << std::endl;
 
                 useCosmic = goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k) );
-                useLaser  = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
-                if(useLaser){
+                useLaser  = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && i < highX && i > lowX && k > lowZ && k < highZ && j > lowY && j < highY);
+                if(atXLowerBoundary || atXUpperBoundary){
+                    numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i+1,j,k) + laser_dZ->GetBinContent(i+1,j,k) + cosmic_dZ->GetBinContent(i-1,j,k) + laser_dZ->GetBinContent(i-1,j,k) );
+                    denominator = 6.0;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atYLowerBoundary || atYUpperBoundary){
+                    numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i,j+1,k) + laser_dZ->GetBinContent(i,j+1,k) + cosmic_dZ->GetBinContent(i,j-1,k) + laser_dZ->GetBinContent(i,j-1,k) );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(atZLowerBoundary || atZUpperBoundary){
+                    numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i,j,k+1) + laser_dZ->GetBinContent(i,j,k+1) + cosmic_dZ->GetBinContent(i,j,k-1) + laser_dZ->GetBinContent(i,j,k-1) );
+                    denominator = 6.0;
+                    //std::cout << "At Z Boundary" << std::endl;
+                    if(isData){
+                        //should be a cool calculation
+                        error = -1.0;
+                    }
+                    
+                    else{
+                        //in this case, error is meaningless
+                        error = -1.0;
+                    }
+                    
+                    
+                    
+                }
+                
+                else if(useLaser){
                     numerator = laser_dZ->GetBinContent(i,j,k);
                     denominator = 1.0;
                     if(!isData){
@@ -4599,10 +4771,10 @@ int main(int argc, char *argv[]){
    // calculator->doFits();
   //  calculator->combineWeightedMaps();
   //  calculator->combineMaps(true, true, false);
-  //  calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
+    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
   //  calculator->compareFaces(true);
   //  calculator->MakeDistorionTree();
-    calculator->studyResults2("PleaseWorkLaser.root", "AnglePlots/PleaseWork.png");
+  //  calculator->studyResults2("PleaseWorkLaser.root", "AnglePlots/PleaseWork.png");
  //  calculator->compareMeans();
  //   calculator->Residual_afterTrackCorr("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnlySmoothed.root", "AnglePlots/TrackResidualsMergedMapsSmoothCosmicOnly.png");
   if(doVoxIter){
