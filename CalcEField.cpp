@@ -2629,7 +2629,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 */
                 //std::cout << "Cosmic: " << cosmic_x_correction << " Laser: " << laser_x_correction << std::endl;
                 useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k) );
-                useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
+                useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && i < highX && i > lowX && k > lowZ && k < highZ && j > lowY && j < highY);
                 atXLowerBoundary = (i == lowX && j > lowY && j < highY && k > lowZ && k < highZ);
                 atYLowerBoundary = (j == lowY && i > lowX && i < highX && k > lowZ && k < highZ);
                 atZLowerBoundary = (k == lowZ && i > lowX && i < highX && j > lowY && j < highY);
