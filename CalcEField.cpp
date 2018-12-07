@@ -18,6 +18,7 @@
 
 
 
+
 double calcChi2(const double *vals){
    
     const Double_t x = vals[0];
@@ -39,6 +40,11 @@ double calcChi2(const double *vals){
     else
         return 0.0;
     
+}
+
+void eFieldCalculator::setDriftVScale(double laser, double cosmic){
+    laserDriftVScale = laser;
+    cosmicDriftVScale = cosmic;
 }
 
 double eFieldCalculator::doCoordTransformX(const Double_t inputX)
@@ -87,6 +93,14 @@ double eFieldCalculator::doInvCoordTransformZ(const Double_t inputZ)
     outputZ = 100.0*(10.37/Lz)*inputZ;
     
     return outputZ;
+}
+
+bool eFieldCalculator::isInLaserRegion(double x, double y, double z){
+    if(x < 204.83 && x >= 51.21 && y >= -51.15 && y < 51.15 && z >= 207.36 && z < 808.7)
+        return true;
+    else
+        return false;
+    
 }
 
 void eFieldCalculator::compareCalib(bool isData)
@@ -2525,6 +2539,9 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     
     if(isData)
         driftV = 0.008;
+    //For tuning drift V scale
+    //if(isData)
+    //    driftV = 0.01;
     driftV = driftSign*driftV;
     std::string inputLaser;
     std::string inputCosmic;
@@ -2532,7 +2549,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     std::string inputTruth;
     std::string outputName;
     if(isData)
-        outputName = "MergedMapsSmoothCosmicAndLaser.root";
+        outputName = "PleaseWork.root";
     else
         outputName = "MergedMapsSmoothCosmicAndLaserMC.root";
     
@@ -2595,15 +2612,16 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 bool useCosmic = false;
                 bool useLaser  = false;
                 bool goodAgreement = false;
-                double cosmic_x_correction = -i*driftV*cosmic_dX->GetXaxis()->GetBinWidth(i);
-                double laser_x_correction  = -i*driftV*cosmic_dX->GetXaxis()->GetBinWidth(i);
+                double cosmic_x_correction = -i*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i);
+                double laser_x_correction  = -i*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i);
                 
-                
+                /*
                 if(driftSign > 0.0)
                     laser_x_correction = 0.0;
                 else
                     cosmic_x_correction = 0.0;
-                std::cout << "Cosmic: " << cosmic_x_correction << " Laser: " << laser_x_correction << std::endl;
+                */
+                //std::cout << "Cosmic: " << cosmic_x_correction << " Laser: " << laser_x_correction << std::endl;
                 useCosmic = goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k) );
                 useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
                 if(useLaser){
@@ -2806,6 +2824,11 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     
     outputHistos->Write();
     outputHistos->Close();
+    
+    delete fileLaser;
+    delete outputHistos;
+    delete fileCosmic;
+    delete fileTruth;
     
 }
 
@@ -3088,6 +3111,7 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     //Look at larger track slices
     //const double bufferLength = 0.05*100;
     double driftV = 0.008;
+    //double driftV = 0.01; //for optimization studies
     if(isMC)
        driftV   = 0.0;
     const double bufferLength = 0.0;
@@ -3324,16 +3348,14 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     
     TH3F* diff_dX = new TH3F("diff_dX","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
     
-    TFile* fileMeans = new TFile(meanFileName.c_str(), "RECREATE");
+    //TFile* fileMeans = new TFile(meanFileName.c_str(), "RECREATE");
     
     const int nTracks = 10;
     int trackNo       = 0;
     TH3F* tracksOrig[nTracks];
     TH3F* tracksCorr[nTracks];
     
-    for(int i = 0; i < nTracks; ++i){
-       /*tracksOrig[i] = new TH3F(Form("tracksOrig%d", i),"",dist_dX->GetNbinsZ(),0,10.0,dist_dX->GetNbinsX(),0,2.5,dist_dX->GetNbinsY(),0,2.5);
-       tracksCorr[i] = new TH3F(Form("tracksCorr%d", i),"",dist_dX->GetNbinsZ(),0,10.0,dist_dX->GetNbinsX(),0,2.5,dist_dX->GetNbinsY(),0,2.5);*/
+    /*for(int i = 0; i < nTracks; ++i){
        tracksOrig[i] = new TH3F(Form("tracksOrig%d", i),"",1000,0,10.0,250,0,2.5,250,0,2.5);
        tracksCorr[i] = new TH3F(Form("tracksCorr%d", i),"",1000,0,10.0,250,0,2.5,250,0,2.5);
        tracksOrig[i]->GetXaxis()->SetTitle("Z");
@@ -3350,7 +3372,7 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
        tracksCorr[i]->SetMarkerColor(kGreen+2);
         
         
-    }
+    }*/
     int counter = 0;
     //while (readerTracks.Next())
     //while ((readerTracks.Next()) && (counter < 100000))
@@ -3372,8 +3394,13 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
             for(int i = 0; i < *nElec_tracks; i++){
                 //std::vector<double> points_laser;
                 //std::vector<double> points_cosmic;
+                double driftVFactor = 1.0;
+                if(isInLaserRegion(doInvCoordTransformX(elecX_tracks_orig[i] ), doInvCoordTransformY(elecY_tracks_orig[i]), doInvCoordTransformZ(elecZ_tracks_orig[i]) ) )
+                    driftVFactor = laserDriftVScale;
+                else
+                    driftVFactor = cosmicDriftVScale;
                 
-                const double pointOffset = driftV*(Lx-elecX_tracks_orig[i]);
+                const double pointOffset = driftV*driftVFactor*(Lx-elecX_tracks_orig[i]);
               
                 elecX_tracks.push_back(elecX_tracks_orig[i]  + pointOffset);
                 elecY_tracks.push_back(elecY_tracks_orig[i]);
@@ -3647,7 +3674,12 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
                   float x_center = elecX_tracks[i];
                   if(containsLaser){
                       //std::cout << "Correcting x point: " << x_center << " " << elecX_tracks[i] - pointOffset << std::endl;
-                      pointOffset = driftV*(Lx-elecX_tracks[i]);
+                      double driftVFactor = 1.0;
+                      if(isInLaserRegion(doInvCoordTransformX(elecX_tracks_orig[i] ), doInvCoordTransformY(elecY_tracks_orig[i]), doInvCoordTransformZ(elecZ_tracks_orig[i]) ) )
+                          driftVFactor = laserDriftVScale;
+                      else
+                          driftVFactor = cosmicDriftVScale;
+                      pointOffset = driftV*driftVFactor*(Lx-elecX_tracks[i]);
                   }
                   float y_center = elecY_tracks[i];
                   float z_center = elecZ_tracks[i];
@@ -3760,6 +3792,12 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
                 float x_center = elecX_tracks[i];
                 if(containsLaser){
                     //std::cout << "Correcting x point: " << x_center << " " << elecX_tracks[i] - pointOffset << std::endl;
+                    double driftVFactor = 1.0;
+                    if(isInLaserRegion(doInvCoordTransformX(elecX_tracks_orig[i] ), doInvCoordTransformY(elecY_tracks_orig[i]), doInvCoordTransformZ(elecZ_tracks_orig[i]) ) )
+                        driftVFactor = laserDriftVScale;
+                    else
+                        driftVFactor = cosmicDriftVScale;
+                    pointOffset = driftV*driftVFactor*(Lx-elecX_tracks[i]);
                     pointOffset = driftV*(Lx-elecX_tracks_orig[i]);
                 }
                 float y_center = elecY_tracks[i];
@@ -3875,11 +3913,11 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
                 //loop over track points
                 for(int point = 0; point < *nElec_tracks; ++point){
                     //std::cout << elecX_tracks[point] << " " << elecY_tracks[point] << " " << elecZ_tracks[point] << std::endl;
-                    tracksOrig[trackNo]->Fill(elecZ_tracks[point], elecX_tracks[point], elecY_tracks[point]);
+                    //tracksOrig[trackNo]->Fill(elecZ_tracks[point], elecX_tracks[point], elecY_tracks[point]);
                     float xDistortion = -0.01*dist_dX->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
                     float yDistortion = 0.01*dist_dY->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
                     float zDistortion = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
-                    tracksCorr[trackNo]->Fill((elecZ_tracks[point]+zDistortion), (elecX_tracks[point]+xDistortion), (elecY_tracks[point]+yDistortion));
+                    //tracksCorr[trackNo]->Fill((elecZ_tracks[point]+zDistortion), (elecX_tracks[point]+xDistortion), (elecY_tracks[point]+yDistortion));
                     
                 }
                   
@@ -4107,8 +4145,8 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     c_combined->SaveAs(plotName.c_str());
     //c_combined->SaveAs("/nashome/j/joelam/combinedAngHist.pdf");
     
-    fileMeans->Write();
-    fileMeans->Close();
+    //fileMeans->Write();
+    //fileMeans->Close();
     return_vec.push_back(corrAngHist->GetMean());
     return_vec.push_back(origAngHist->GetMean());
     return_vec.push_back(totalTracks);
@@ -4152,7 +4190,7 @@ void eFieldCalculator::compareMeans(){
 
 }
 
-void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
+std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputMapFileName, std::string plotName){
     
     gStyle->SetOptStat(0);
     gStyle->SetTitleFontSize(0.15);
@@ -4164,10 +4202,30 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     gStyle->SetPadBottomMargin(0.12);
     gStyle->SetLegendTextSize(0.04);
     
+    std::vector<double> return_vec;
+    
     const double epsilon = 1e-10;
     const int    pointReduction = 10;
     int badPoints_up = 0;
     int badPoints_down = 0;
+    double driftV = 0.008;
+    bool doTriLin = false;
+    
+    bool containsLaser = false;
+    bool isMC = false;
+    
+    
+    
+    if(inputMapFileName.find("MC") != std::string::npos)
+        isMC = true;
+    if(inputMapFileName.find("Laser") != std::string::npos)
+        containsLaser = true;
+    if(isMC || containsLaser)
+        driftV = 0.0;
+    
+    
+    std::cout << "Is MC: " << isMC << " Is laser: " << containsLaser << std::endl;
+    std::cout << "Drift V: " << driftV << std::endl;
     
     gInterpreter->GenerateDictionary("vector<TVector3>","TVector3.h");
     gInterpreter->GenerateDictionary("vector<vector<vector<TVector3>>>","TVector3.h");
@@ -4175,8 +4233,8 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     // Input
     TChain *RecoTrackTree = new TChain("tracks");
     TChain *LaserInfoTree = new TChain("lasers");
-    RecoTrackTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7267.root");
-    LaserInfoTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7267.root");
+    RecoTrackTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7268.root");
+    LaserInfoTree->Add("/uboone/data/users/joelam/SCEInputFiles/laserbeams-data-newsmooth-7268.root");
     
     // Laser truth Info
     TVector3 EntryPoint;
@@ -4196,9 +4254,10 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     RecoTrackTree->SetBranchAddress("event", &EventNumber);
     
     // Read Distortion
+    TFile *InFile = new TFile(inputMapFileName.c_str());
     //TFile *InFile = new TFile("output_hists_data_200k_Aug3.root","READ");
     //TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicAndLaser.root", "READ");
-    TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnly.root", "READ");
+    //TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnly.root", "READ");
     //TFile *InFile = new TFile("/uboone/data/users/joelam/SCEInputFiles/MergedMapsLaserOnly.root", "READ");
     
     //TFile *InFile = new TFile("RecoCorr-N3-S50-Data-2side-Anode.root", "READ");
@@ -4255,13 +4314,13 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     TH2F *h_tracksZY = new TH2F("tracksXZ", "Tracks XZ", nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_y+1,yMin,yMax);
     TH3F *h_tracks   = new TH3F("tracks", "Tracks", nCalibDivisions_x+1,xMin,xMax, nCalibDivisions_y+1,yMin,yMax, nCalibDivisions_z+1,zMin,zMax);
     
-    TFile *OutFile = new TFile("LaserTracksData.root", "RECREATE");
+    //TFile *OutFile = new TFile("LaserTracksData.root", "RECREATE");
     TTree *T_tracks = new TTree("SpaCEtree_tracks","SpaCEtree_tracks");
     T_tracks->Branch("elecX_tracks",&elecX);
     T_tracks->Branch("elecY_tracks",&elecY);
     T_tracks->Branch("elecZ_tracks",&elecZ);
     T_tracks->Branch("nElec_tracks",&nElec_tracks,"nElec_tracks/I");
-    T_tracks->SetDirectory(OutFile);
+   // T_tracks->SetDirectory(OutFile);
     
     TF1 *f1 = new TF1("chi2L", "ROOT::Math::chisquared_pdf(x, [0])", 0, 10.0);
     
@@ -4372,13 +4431,13 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
                 double distZTriLin = TrilinInterp(xPoint, yPoint, zPoint, dZddd, dZddu, dZdud, dZduu, dZudd, dZudu, dZuud, dZuuu, x_up, x_down, y_up, y_down, z_up, z_down);
                 
                 if(doTriLin){
-                    distX = distXTriLin;
+                    distX = distXTriLin - driftV*xPoint;
                     distY = distYTriLin;
                     distZ = distZTriLin;
                 }
                 
                 else{
-                   distX = distXRoot;
+                   distX = distXRoot - driftV*TrackSamples[i][0];
                    distY = distYRoot;
                    distZ = distZRoot;
                 }
@@ -4438,25 +4497,26 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     if(doTriLin)
         Title = "Residual of Track Hits before and after Cosmic Correction (Tri Linear Interpolation)";
     else
-        Title = "Residual of Track Hits before and after Merged Correction (TH3 Interpolation)";
+        Title = "Residual of Track Hits before and after Correction";
     h2->SetTitle(Title.c_str());
     h2->GetXaxis()->SetTitle("Distance to the true track [cm]");
     h2->GetYaxis()->SetTitle("Entries / 0.2 cm");
-    h2->GetYaxis()->SetRangeUser(0.0, 1.0);
-    h1->GetYaxis()->SetRangeUser(0.0, 1.0);
-    double scale = 1.0;
-    if(h1->Integral() > 0)
+    //h2->GetYaxis()->SetRangeUser(0.0, 1.0);
+    //h1->GetYaxis()->SetRangeUser(0.0, 1.0);
+    //double scale = 1.0;
+    /*if(h1->Integral() > 0)
         scale = 1 / (h1->Integral());
     h1->Scale(scale);
     if(h2->Integral() > 0)
-        scale = 1 / (h2->Integral());
-    h2->Scale(scale);
+        scale = 1 / (h2->Integral());*/
+   //h2->Scale(scale);
     
+    h2->SetMaximum(400e3);
     h2->Draw("hist");
     h1->Draw("hist SAME");
-    f1->Draw("SAME");
-    h2->GetYaxis()->SetRangeUser(0.0, 0.5);
-    h1->GetYaxis()->SetRangeUser(0.0, 0.5);
+    //f1->Draw("SAME");
+   // h2->GetYaxis()->SetRangeUser(0.0, 0.5);
+   // h1->GetYaxis()->SetRangeUser(0.0, 0.5);
     
     TLegend *legend = new TLegend(0.4,0.65,0.8,0.85);
     legend->AddEntry(h1,"Residual before correction");
@@ -4465,11 +4525,15 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     
     
     c1->Update();
-    c1->SaveAs("TrackResiduals.pdf");
+    c1->SaveAs(plotName.c_str());
     
     std::cout << "Bad points (too big): " << badPoints_up << std::endl;
     std::cout << "Bad points (too small): " << badPoints_down << std::endl;
     std::cout << "Mean after correction: " <<  h2->GetMean() << std::endl;
+    
+    return_vec.push_back(h2->GetMean());
+    return_vec.push_back(h1->GetMean());
+    return_vec.push_back(h1->Integral());
     
     c1->Clear();
     h_trkX->GetXaxis()->SetTitle("Track Point (cm)");
@@ -4495,42 +4559,125 @@ void eFieldCalculator::Residual_afterTrackCorr(bool doTriLin){
     drawPlanarPlot(h_tracksXZ, 0, "Tracks", "LaserTracks", axisType::yAxis);
     drawPlanarPlot(h_tracksZY, 0, "Tracks", "LaserTracks", axisType::xAxis);
    
-    OutFile->Write();
-    OutFile->Close();
+   // OutFile->Write();
+   // OutFile->Close();
+    
+/*    delete RecoTrackTree;
+    delete LaserInfoTree;
+    delete InFile;
+    delete c1;
+    delete h1;
+    delete h2;
+    delete h_IntX ;
+    delete h_IntY ;
+    delete h_IntZ ;
+    
+    delete h_trkX;
+    delete h_trkY;
+    delete h_trkZ;
+    
+    delete h_tracksXZ;
+    delete h_tracksZY;
+    delete h_tracks;
+    delete T_tracks;
+    delete f1;
+*/
+    return return_vec;
     
     
 }
 
 int main(int argc, char *argv[]){
-
+  
+  const bool doVoxIter = false;
+  const bool doVelocityIter = false;
   eFieldCalculator *calculator = new eFieldCalculator();
+
   //calculator->compareCalib(true);
   //calculator->compareCalibZXPlane(true);
   //calculator->compareTruth(false);
    // calculator->doFits();
   //  calculator->combineWeightedMaps();
-    calculator->combineMaps(true, true, false);
-  //  calculator->combineMaps(6, 21, 8, 19, 21, 79, false);
+  //  calculator->combineMaps(true, true, false);
+  //  calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
   //  calculator->compareFaces(true);
   //  calculator->MakeDistorionTree();
-    calculator->studyResults2("MergedMapsCosmicOnlySmoothed.root", "AnglePlots/MergedMapsCosmicOnlySmoothed.png");
+    calculator->studyResults2("PleaseWorkLaser.root", "AnglePlots/PleaseWork.png");
  //  calculator->compareMeans();
-  //  calculator->Residual_afterTrackCorr(false);
-    /*const int maxVoxels   = 25;
+ //   calculator->Residual_afterTrackCorr("/uboone/data/users/joelam/SCEInputFiles/MergedMapsCosmicOnlySmoothed.root", "AnglePlots/TrackResidualsMergedMapsSmoothCosmicOnly.png");
+  if(doVoxIter){
+    const int maxVoxels   = 26;
     const int lowerZVoxel = 21;
-    const int upperZVxoel = 79;
+    const int upperZVoxel = 79;
+    const int largestVox = 10;
+    int iteration = 0;
+    TFile *file = new TFile("OptimizationHistograms.root", "RECREATE");
+    TH2F *h_voxelsVAngle = new TH2F("voxelsVAngle", "Difference in Mean Angle (degrees)", maxVoxels, 0.0, maxVoxels, maxVoxels, 0.0, maxVoxels);
+    TH2F *h_voxelsVResidual = new TH2F("voxelsVResidual", "Difference in Mean Residual (cm)", maxVoxels, 0.0, maxVoxels, maxVoxels, 0.0, maxVoxels);
     std::vector<double> angleMeans;
-    for(int vox = 0; vox < maxVoxels; ++vox){
-        int lowVox = vox;
-        int highVox = maxVoxels - vox;
-        if(lowVox > highVox) break;
-        calculator->combineMaps(lowVox, highVox, lowVox, highVox, lowerZVoxel, upperZVxoel, true);
-        angleMeans = calculator->studyResults2(false);
-        std::cout << angleMeans[0] << " " << angleMeans[1] << std::endl;
+    std::vector<double> residualMeans;
+    for(int xVox = 5; xVox < maxVoxels; ++xVox){
+        
+	int lowXVox = xVox;
+        int highXVox = maxVoxels - xVox;
+        if(lowXVox > largestVox) break;
+        for(int yVox = 5; yVox < maxVoxels; ++yVox){
+          std::cout << "Iteration: " << iteration << std::endl;
+	  int lowYVox = yVox;
+          int highYVox = maxVoxels - yVox;
+          if(lowYVox > largestVox) break;
+          
+          calculator->combineMaps(lowXVox, highXVox, lowYVox, highYVox, lowerZVoxel, upperZVoxel, true);
+          angleMeans = calculator->studyResults2();
+          //std::cout << angleMeans[0] << " " << angleMeans[1] << std::endl;
+          residualMeans = calculator->Residual_afterTrackCorr();
+          //std::cout << residualMeans[0] << " " << residualMeans[1] << std::endl;
+          h_voxelsVAngle->Fill(lowXVox, lowYVox, (angleMeans[0] - angleMeans[1]));
+          h_voxelsVResidual->Fill(lowXVox, lowYVox, (residualMeans[0] - residualMeans[1]) );
+	  ++iteration;
+        }
+        
+    }
+    
+    
+    file->Write();
+    file->Close();
+      delete file;
+    }
+    if(doVelocityIter){
+        const double driftV = 0.01;
+        const int maxVelocity   = 4;
+        int iteration = 0;
+        TFile *file = new TFile("VelocityOptimizationHistograms.root", "RECREATE");
+        TH2F *h_voxelsVAngle = new TH2F("voxelsVAngle", "Difference in Mean Angle (degrees)", 7,  -0.03, 0.04, 7, -0.03, 0.04);
+        TH2F *h_voxelsVResidual = new TH2F("voxelsVResidual", "Difference in Mean Residual (cm)", 7, -0.03, 0.04, 7, -0.03, 0.04);
+        h_voxelsVAngle->GetXaxis()->SetTitle("Laser Drift V");
+        h_voxelsVAngle->GetYaxis()->SetTitle("Cosmic Drift V");
+        h_voxelsVResidual->GetXaxis()->SetTitle("Laser Drift V");
+        h_voxelsVResidual->GetYaxis()->SetTitle("Cosmic Drift V");
+        std::vector<double> angleMeans;
+        std::vector<double> residualMeans;
+        for(int xVox = -3; xVox <maxVelocity; ++xVox){
+            for(int yVox = -3; yVox < maxVelocity; ++yVox){
+                std::cout << "Iteration: " << iteration << std::endl;
+                calculator->setDriftVScale(xVox, yVox); //puts laser drift V on the X axis
+                calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
+                angleMeans = calculator->studyResults2();
+               
+                residualMeans = calculator->Residual_afterTrackCorr();
+                h_voxelsVAngle->SetBinContent(xVox+4, yVox+4, (angleMeans[0] - angleMeans[1]));
+                h_voxelsVResidual->SetBinContent(xVox+4, yVox+4, (residualMeans[0] - residualMeans[1]) );
+                ++iteration;
+            }
+            
+        }
         
         
-    }*/
-
+        file->Write();
+        file->Close();
+        delete file;
+    }
+    
   return 0;
 } //end of main
 

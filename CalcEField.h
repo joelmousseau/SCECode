@@ -85,7 +85,7 @@ class eFieldCalculator{
 
   public:
      
-    eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = false; driftSign = 1.0;}
+    eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = false; driftSign = 1.0; laserDriftVScale = 1.0; cosmicDriftVScale = 1.0;}
      
      ~eFieldCalculator(){}
     
@@ -156,9 +156,16 @@ class eFieldCalculator{
     
     void compareMeans();
 
-    std::vector<double> studyResults2(std::string inputMapFileName = "IterativeCosmicMap.root", std::string plotName = "NoPlot.png");
+    std::vector<double> studyResults2(std::string inputMapFileName = "IterativeLaserMap.root", std::string plotName = "NoPlot.png");
     
-    void Residual_afterTrackCorr(bool doTriLin = false);
+    std::vector<double> Residual_afterTrackCorr(std::string inputMapFileName = "IterativeLaserMap.root", std::string plotName = "NoPlot.png");
+    
+    void setDriftVScale(double laser, double cosmic);
+    
+    bool isInLaserRegion(double x, double y, double z);
+    
+    double cosmicDriftVScale;
+    double laserDriftVScale;
     
   private:
 
