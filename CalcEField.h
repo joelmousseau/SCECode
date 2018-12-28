@@ -101,7 +101,7 @@ class eFieldCalculator{
     
      double doInvCoordTransformZ(const Double_t inputZ);
      
-     bool goodLaser(double value, double error){return (value < 1000.0 && error > 0.0 && isRelErrorSmall(value, error));}
+     bool goodLaser(double value, double error){return (value < 1000.0  && error > 0.0 && isRelErrorSmall(value, error));}
      
      bool goodCosmic(double value, double error){return (isRelErrorSmall(value, error) );}
      
@@ -154,7 +154,7 @@ class eFieldCalculator{
     
     void doFits();
     
-    void compareMeans();
+    void compareDataMC(std::string inputData, std::string inputMC, std::string outputTag);
 
     std::vector<double> studyResults2(std::string inputMapFileName = "IterativeLaserMap.root", std::string plotName = "NoPlot.png");
     
@@ -163,6 +163,8 @@ class eFieldCalculator{
     void setDriftVScale(double laser, double cosmic);
     
     bool isInLaserRegion(double x, double y, double z);
+    
+    void makeCSVMap(std::string inputFileName, std::string outputFileName);
     
     double cosmicDriftVScale;
     double laserDriftVScale;
