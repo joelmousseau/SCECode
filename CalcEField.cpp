@@ -103,6 +103,11 @@ bool eFieldCalculator::isInLaserRegion(double x, double y, double z){
     
 }
 
+/*void eFieldCalculator::makeFwdMapPlots(std::string inputFileName){
+    
+    
+}*/
+
 void eFieldCalculator::compareCalib(bool isData)
 {
   
@@ -2552,7 +2557,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     //    driftV = 0.008;
     //For tuning drift V scale
     if(isData)
-        driftV = 0.01;
+        driftV = 0.001;
     driftV = driftSign*driftV;
     std::cout << "Laser Scale: " << laserDriftVScale << " Cosmic scale: " <<cosmicDriftVScale << std::endl;
     std::string inputLaser;
@@ -2561,7 +2566,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     std::string inputTruth;
     std::string outputName;
     if(isData)
-        outputName = "IterativeLaserMap.root";
+        outputName = "MergedMapsSmoothCosmicAndLaserV1098.root";
     else
         outputName = "MergedMapsSmoothCosmicAndLaserMC.root";
     
@@ -3044,6 +3049,8 @@ void eFieldCalculator::MakeDistorionTree(){
     
     double x_true, y_true, z_true;
     double x_reco, y_reco, z_reco;
+    double x_fwd, y_fwd, z_fwd;
+    double x_bkwd, y_bkwd, z_bkwd;
     double Dx, Dy, Dz;
     double Ex, Ey, Ez;
     int elecFate;
@@ -3082,26 +3089,47 @@ void eFieldCalculator::MakeDistorionTree(){
     
     for(int i = 0; i <= eFieldVoxeslX; ++i){
         x_reco = i*eFieldVoexlWdith;
+        double x_interp = x_reco;
+        if(i == 0)
+            x_interp = (i+1)*eFieldVoexlWdith;
+        else if( i == eFieldVoxeslX)
+            x_interp = (i-1)*eFieldVoexlWdith;
+        
         for(int j = 0; j <= eFieldVoxeslY; ++j){
             y_reco = j*eFieldVoexlWdith;
+            double y_interp = y_reco;
+            if(j == 0)
+                y_interp = (j+1)*eFieldVoexlWdith;
+            else if( j == eFieldVoxeslY)
+                y_interp = (j-1)*eFieldVoexlWdith;
             for(int k = 0; k <= eFieldVoxeslZ; ++k){
                 z_reco = k*eFieldVoexlWdith;
-                if(E_field_X->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)) > 10e10)
+                double z_interp = z_reco;
+                if(k == 0)
+                    z_interp = (k+1)*eFieldVoexlWdith;
+                else if(k == eFieldVoxeslZ)
+                    z_interp = (k-1)*eFieldVoexlWdith;
+                if(E_field_X->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)) > 10e10){
+                    std::cout << "Bogus Point: " << x_interp << " " << y_interp << " " << z_interp << std::endl;
                     Ex = 0.0;
-                    
-                else
-                    Ex = kVtoVolts*metersTocm*(E0 - E_field_X->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)));
-                if(doInvCoordTransformX(x_reco) < 1.0)
-                    std::cout << E_field_X->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)) << std::endl;
+                }
                 
-                if(E_field_Y->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)) > 10e10)
+                else
+                    Ex = kVtoVolts*metersTocm*(E0 - E_field_X->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)));
+                if(E_field_Y->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)) > 10e10){
+                    std::cout << "Bogus Point: " << x_interp << " " << y_interp << " " << z_interp << std::endl;
                     Ey = 0.0;
+                }
+                
                 else
-                    Ey = kVtoVolts*metersTocm*(E_field_Y->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)));
-                if(E_field_Z->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)) > 10e10)
+                    Ey = kVtoVolts*metersTocm*(E_field_Y->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)));
+                if(E_field_Z->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)) > 10e10){
+                    std::cout << "Bogus Point: " << x_interp << " " << y_interp << " " << z_interp << std::endl;
                     Ez = 0.0;
+                }
+                
                 else
-                    Ez = kVtoVolts*metersTocm*(E_field_Z->Interpolate(doInvCoordTransformX(x_reco), doInvCoordTransformY(y_reco), doInvCoordTransformZ(z_reco)));
+                    Ez = kVtoVolts*metersTocm*(E_field_Z->Interpolate(doInvCoordTransformX(x_interp), doInvCoordTransformY(y_interp), doInvCoordTransformZ(z_interp)));
                 //std::cout << Ex << " " << x_reco << " " << doInvCoordTransformX(x_reco) << " " << Ey << " " << y_reco << " " << doInvCoordTransformY(y_reco) << " " << Ez << " " << z_reco << " " << doInvCoordTransformZ(z_reco) << std::endl;
                 T_field_calib->Fill();
             }
@@ -3183,6 +3211,124 @@ void eFieldCalculator::MakeDistorionTree(){
     }*/
     T_field_calib->Write();
     T_calib->Write();
+    outputFile->Close();
+    
+    
+}
+
+void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
+    std::string inputHistograms;
+    if(isFwd)
+      inputHistograms = "MergedFwdMapsSmoothCosmicAndLaserV1098.root";
+    else
+      inputHistograms = "MergedMapsSmoothCosmicAndLaserV1098.root";
+    
+    std::string inputEField     = "/uboone/data/users/joelam/SCEInputFiles/Emap-NTT-1-MergedMapsSmoothCosmicAndLaserV1098_TH3.root";
+    std::string outputFileName;
+    if(isFwd)
+      outputFileName = "SCEDistortionsMergedFwdV1098.root";
+    else
+      outputFileName = "SCEDistortionsMergedV1098.root";
+    TFile* fileInput = new TFile(inputHistograms.c_str());
+    TFile* fileInputEField = new TFile(inputEField.c_str());
+    
+    TH3F* combine_dX;
+    TH3F* combine_dY;
+    TH3F* combine_dZ;
+    
+    if(isFwd){
+       combine_dX = (TH3F*) fileInput->Get("combined_fwd_dX");
+       combine_dY = (TH3F*) fileInput->Get("combined_fwd_dY");
+       combine_dZ = (TH3F*) fileInput->Get("combined_fwd_dZ");
+    }
+    
+    else{
+        combine_dX = (TH3F*) fileInput->Get("combined_dX");
+        combine_dY = (TH3F*) fileInput->Get("combined_dY");
+        combine_dZ = (TH3F*) fileInput->Get("combined_dZ");
+    }
+    
+    
+    TH3F* E_field_X = (TH3F*) fileInputEField->Get("Distorted_EField_X");
+    TH3F* E_field_Y = (TH3F*) fileInputEField->Get("Distorted_EField_Y");
+    TH3F* E_field_Z = (TH3F*) fileInputEField->Get("Distorted_EField_Z");
+    
+    std::cout << xMin << ", " << xMax << std::endl;
+    std::cout << yMin << ", " << yMax << std::endl;
+    std::cout << zMin << ", " << zMax << std::endl;
+
+    
+    const double kVtoVolts = 1000.0;
+    const double metersTocm = 100.0;
+    const double cmToMeters = 0.01;
+    const double E0 = 0.266545; // kV / cm
+    
+    const int nXbins = 26;
+    const int nYbins = 26;
+    const int nZbins = 101;
+    
+    const double minX = -0.05;
+    const double maxX = 2.55;
+    const double minY = -0.05;
+    const double maxY = 2.55;
+    const double minZ = -0.05;
+    const double maxZ = 10.05;
+    
+    TFile *outputFile = new TFile(outputFileName.c_str(), "RECREATE");
+    TH3F *hDx = new TH3F("hDx", "hDx", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    TH3F *hDy = new TH3F("hDy", "hDy", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    TH3F *hDz = new TH3F("hDz", "hDz", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    
+    TH3F *hEx = new TH3F("hEx", "hEx", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    TH3F *hEy = new TH3F("hEy", "hEy", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    TH3F *hEz = new TH3F("hEz", "hEz", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
+    
+    
+    for(int i = combine_dX->GetNbinsX(); i > 0; --i){
+        int xBin = (nXbins - i)+1;
+        int xEBin = xBin;
+        if(i == combine_dX->GetNbinsX())
+            xEBin = xBin + 1;
+        else if(i == 1)
+            xEBin = xBin - 1;
+        
+        for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+            int yEBin = j;
+            if(j == 1)
+                yEBin = yEBin + 1;
+            else if(j == combine_dX->GetNbinsY())
+                yEBin = yEBin - 1;
+            for(int k = 1; k <= combine_dX->GetNbinsZ(); k++){
+                int zEBin = k;
+                if(k == 1)
+                    zEBin = zEBin + 1;
+                else if(k == combine_dX->GetNbinsZ())
+                    zEBin = zEBin - 1;
+               double Dx = -1.0*cmToMeters*combine_dX->GetBinContent(xEBin, yEBin, zEBin);
+               double Dy = cmToMeters*combine_dY->GetBinContent(xEBin, yEBin, zEBin);
+               double Dz = cmToMeters*combine_dZ->GetBinContent(xEBin, yEBin, zEBin);
+               
+               double Ex = kVtoVolts*metersTocm*(E0 - E_field_X->GetBinContent(xEBin, yEBin, zEBin));
+               double Ey = kVtoVolts*metersTocm*E_field_Y->GetBinContent(xEBin, yEBin, zEBin);
+               double Ez = kVtoVolts*metersTocm*E_field_Z->GetBinContent(xEBin, yEBin, zEBin);
+                
+                std::cout << xBin << ", " << j << ", " << k << ", " << Dx << ", " << Dy << ", " << Dz <<", " << Ex << ", " << Ey << ", " << Ez << std::endl;
+                
+               hDx->SetBinContent(xBin, j, k, Dx);
+               hDy->SetBinContent(xBin, j, k, Dy);
+               hDz->SetBinContent(xBin, j, k, Dz);
+                
+               hEx->SetBinContent(xBin, j, k, Ex);
+               hEy->SetBinContent(xBin, j, k, Ey);
+               hEz->SetBinContent(xBin, j, k, Ez);
+                
+
+                //T_field_calib->Fill();
+                
+            }
+        }
+    }
+    outputFile->Write();
     outputFile->Close();
     
     
@@ -4499,7 +4645,8 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     const double epsilon = 1e-10;
     const int    pointReduction = 10;
-    const double TailValue = 2.0;
+    const int TailDivisions = 5;
+    const double TailValue[TailDivisions] = {1.0, 2.0, 4.0, 6.0, 8.0};
     int badPoints_up = 0;
     int badPoints_down = 0;
     int oov_Hits = 0;
@@ -4508,7 +4655,7 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     bool containsLaser = false;
     bool isMC = false;
-    const bool laserRegionOnly = true;
+    const bool laserRegionOnly = false;
     
     
     
@@ -4572,15 +4719,15 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     //TFile *InFile = new TFile("RecoCorr-N3-S50-Data-2side-Anode.root", "READ");
     
-    TH3F *Dx = (TH3F*) InFile->Get("Reco_Displacement_X");
+    /*TH3F *Dx = (TH3F*) InFile->Get("Reco_Displacement_X");
     TH3F *Dy = (TH3F*) InFile->Get("Reco_Displacement_Y");
     TH3F *Dz = (TH3F*) InFile->Get("Reco_Displacement_Z");
+    */
     
-    /*
     TH3F *Dx = (TH3F*) InFile->Get("combined_dX");
     TH3F *Dy = (TH3F*) InFile->Get("combined_dY");
     TH3F *Dz = (TH3F*) InFile->Get("combined_dZ");
-    */
+    
     /*
     TH3F *Dx_err = (TH3F*) InFile->Get("combined_dX_Error");
     TH3F *Dy_err = (TH3F*) InFile->Get("combined_dY_Error");
@@ -4625,8 +4772,16 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     TH2F *h_tracksXZ = new TH2F("tracksXZ", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_x+1,xMin,xMax);
     TH2F *h_tracksZY = new TH2F("tracksZY", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_y+1,yMin,yMax);
     
-    TH2F *h_tracksXZ_tail = new TH2F("tracksXZ_tail", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_x+1,xMin,xMax);
-    TH2F *h_tracksZY_tail = new TH2F("tracksZY_tail", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_y+1,yMin,yMax);
+    TH2F *h_tracksXZ_tail[TailDivisions];
+    TH2F *h_tracksZY_tail[TailDivisions];
+    for(int i = 0; i < TailDivisions; ++i){
+        h_tracksXZ_tail[i] = new TH2F(Form("tracksXZ_tail_%d"), "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_x+1,xMin,xMax);
+        h_tracksZY_tail[i] = new TH2F(Form("tracksZY_tail_%d"), "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_y+1,yMin,yMax);
+        
+    }
+    
+    
+   
     
     TH3F *h_tracks   = new TH3F("tracks", "Tracks", nCalibDivisions_x+1,xMin,xMax, nCalibDivisions_y+1,yMin,yMax, nCalibDivisions_z+1,zMin,zMax);
     TH3F *h_tracks_tail   = new TH3F("tracks_tail", "Tracks", nCalibDivisions_x+1,xMin,xMax, nCalibDivisions_y+1,yMin,yMax, nCalibDivisions_z+1,zMin,zMax);
@@ -4803,11 +4958,14 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
                 h_tracksXZ->Fill(TrackSamples[i][2],TrackSamples[i][0]);
                 h_tracksZY->Fill(TrackSamples[i][2],TrackSamples[i][1]);
                 h_tracks->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
-                if(residual > TailValue){
-                    h_tracksXZ_tail->Fill(TrackSamples[i][2],TrackSamples[i][0]);
-                    h_tracksZY_tail->Fill(TrackSamples[i][2],TrackSamples[i][1]);
-                    h_tracks_tail->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                for(int bin=0; bin < TailDivisions; ++bin){
+                    //std::cout << TailValue[i] << std::endl;
+                   if(residual > TailValue[bin]){
+                     h_tracksXZ_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][0]);
+                     h_tracksZY_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][1]);
+                     //h_tracks_tail->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
                     
+                  }
                 }
                 
             } //end of loop over track pointss
@@ -4892,32 +5050,14 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     drawPlanarPlot(h_tracksXZ, 0, "Laser Tracks", "LaserTracksZX", axisType::yAxis);
     drawPlanarPlot(h_tracksZY, 0, "Laser Tracks", "LaserTracksZY", axisType::xAxis);
-    drawPlanarPlot(h_tracksXZ_tail, 0, "Laser Tracks", "LaserTracksZXInTail", axisType::yAxis);
-    drawPlanarPlot(h_tracksZY_tail, 0, "Laser Tracks", "LaserTracksZYInTail", axisType::xAxis);
-   
+    for(int i=0; i < TailDivisions; ++i){
+      drawPlanarPlot(h_tracksXZ_tail[i], 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[i]), Form("LaserTracksZXInTail%d", i), axisType::yAxis);
+      drawPlanarPlot(h_tracksZY_tail[i], 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[i]), Form("LaserTracksZYInTail%d", i), axisType::xAxis);
+    }
     OutFile->Write();
     OutFile->Close();
     
-/*    delete RecoTrackTree;
-    delete LaserInfoTree;
-    delete InFile;
-    delete c1;
-    delete h1;
-    delete h2;
-    delete h_IntX ;
-    delete h_IntY ;
-    delete h_IntZ ;
-    
-    delete h_trkX;
-    delete h_trkY;
-    delete h_trkZ;
-    
-    delete h_tracksXZ;
-    delete h_tracksZY;
-    delete h_tracks;
-    delete T_tracks;
-    delete f1;
-*/
+
     return return_vec;
     
     
@@ -4985,7 +5125,10 @@ int main(int argc, char *argv[]){
   const bool doVoxIter = false;
   const bool doVelocityIter = false;
   eFieldCalculator *calculator = new eFieldCalculator();
-
+  
+//    calculator->setDriftVScale(15.0, 7.0);
+//    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
+    
   //calculator->compareCalib(true);
   //calculator->compareCalibZXPlane(true);
   //calculator->compareTruth(false);
@@ -4995,11 +5138,11 @@ int main(int argc, char *argv[]){
    // calculator->combineMaps(false, false, true);
   //  calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
   //  calculator->compareFaces(true);
-   // calculator->MakeDistorionTree();
+  //  calculator->MakeDistorionTree();
  //   calculator->studyResults2("MergedMapsLaserOnly.root", "AnglePlots/MergedMapsLaserOnly.png");
  //   calculator->studyResults2("MergedMapsLaserOnlyMC.root", "AnglePlots/MergedMapsLaserOnlyMC.png");
  //  calculator->compareMeans();
- //  calculator->Residual_afterTrackCorr("MergedMapsLaserOnlyWutMC.root", "ResidualPlots/MergedMapsLaserOnlyMC.png");
+   //calculator->Residual_afterTrackCorr("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaser.root", "ResidualPlots/MergedMapsCosmicAndLaser.png");
  //   calculator->Residual_afterTrackCorr("MergedMapsLaserOnly.root", "ResidualPlots/MergedMapsLaserOnly.png");
  //   calculator->Residual_afterTrackCorr("MergedMapsLaserOnlyMC.root", "ResidualPlots/MergedMapsLaserOnlyMC.png");
   //  calculator->Residual_afterTrackCorr("MergedMapsLaserOnly.root", "ResidualPlots/MergedMapsLaserOnly.png");
@@ -5007,7 +5150,9 @@ int main(int argc, char *argv[]){
   //  calculator->compareDataMC("TrackResidualsCombined.root", "TrackResidualsMCCombined.root", "Combined");
   //  calculator->compareDataMC("TrackResidualsCosmicOnly.root", "TrackResidualsCosmicOnlyMC.root", "CosmicOnly");
   //  calculator->compareDataMC("TrackResidualsLaserOnly.root", "TrackResidualsLaserOnlyMC.root", "LaserOnly");
-    calculator->makeCSVMap("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaser.root","MergedMapsSmoothCosmicAndLaser");
+  //  calculator->makeCSVMap("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserV1098.root","MergedMapsSmoothCosmicAndLaserV1098");
+    calculator->MakeDistortionHistograms(true);
+    calculator->MakeDistortionHistograms(false);
     /*calculator->setDriftVScale(0, 0);
     calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
     calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0and0Default.png");
