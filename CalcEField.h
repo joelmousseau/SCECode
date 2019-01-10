@@ -120,6 +120,8 @@ class eFieldCalculator{
      void compareCalibZXPlane(bool isData = false);
      
      void compareTruth(bool sigmaDiff = false);
+    
+     void makeFwdMapPlots();
      
      double calculateFWHM(TH1F *hist);
      
