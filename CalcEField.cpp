@@ -103,8 +103,449 @@ bool eFieldCalculator::isInLaserRegion(double x, double y, double z){
     
 }
 
-void eFieldCalculator::makeFwdMapPlots(){
-    TFile* fileData = new TFile("MergedFwdMapsSmoothCosmicAndLaserV1098.root");
+void eFieldCalculator::makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing){
+    
+    //const bool doTriLinSmoothing = false;
+    //const bool doEdgeSmoothing   = true;
+    TFile* fileLaser = new TFile(inputMapFileName.c_str());
+    TH3F* combine_dX = (TH3F*) fileLaser->Get("Reco_Displacement_X");
+    TH3F* combine_dY = (TH3F*) fileLaser->Get("Reco_Displacement_Y");
+    TH3F* combine_dZ = (TH3F*) fileLaser->Get("Reco_Displacement_Z");
+    
+    TFile *outputHistos = new TFile(outputMapFileName.c_str(), "RECREATE");
+    
+    TH3F* smooth_dX = new TH3F("Reco_Displacement_X","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* smooth_dY = new TH3F("Reco_Displacement_Y","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    TH3F* smooth_dZ = new TH3F("Reco_Displacement_Z","",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax,nCalibDivisions_z+1,zMin,zMax);
+    
+    TH1F* h_weightsX = new TH1F("weightsX", "Weight Applied to X Distortion", 600, -5.0, 5.0);
+    TH1F* h_weightsY = new TH1F("weightsY", "Weight Applied to Y Distortion", 600, -5.0, 5.0);
+    TH1F* h_weightsZ = new TH1F("weightsZ", "Weight Applied to Z Distortion", 600, -5.0, 5.0);
+    
+    TH1F* h_diffX = new TH1F("diffX", "Difference Across X Boundary", 100, -1.0, 1.0);
+    
+    int lowX = 6;
+    int highX  = 21;
+    int lowY = 8;
+    int highY  = 19;
+    int lowZ = 21;
+    int highZ  = 79;
+    int fitFailures = 0;
+    for(int i=1; i <= combine_dX->GetNbinsX(); ++i){
+        for(int j=1; j <= combine_dX->GetNbinsY(); ++j){
+            for(int k=1; k <= combine_dX->GetNbinsZ(); ++k){
+                bool atXLowerBoundary = false;
+                bool atYLowerBoundary = false;
+                bool atZLowerBoundary = false;
+                bool atXUpperBoundary = false;
+                bool atYUpperBoundary = false;
+                bool atZUpperBoundary = false;
+                
+                atXLowerBoundary = (i == lowX && j > lowY && j < highY && k > lowZ && k < highZ);
+                atYLowerBoundary = (j == lowY && i > lowX && i < highX && k > lowZ && k < highZ);
+                atZLowerBoundary = (k == lowZ && i > lowX && i < highX && j > lowY && j < highY);
+                
+                atXUpperBoundary = (i == highX && j > lowY && j < highY && k > lowZ && k < highZ);
+                atYUpperBoundary = (j == highY && i > lowX && i < highX && k > lowZ && k < highZ);
+                atZUpperBoundary = (k == highZ && i > lowX && i < highX && j > lowY && j < highY);
+                
+                if(doEdgeSmoothing && atXLowerBoundary){
+                    //std::cout << i << std::endl;
+                    
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i+1);
+                    pointTwo.push_back(j);
+                    pointTwo.push_back(k);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::xAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::xAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::xAxis);
+                    
+                   // std::cout << "Diff Before: " << (combine_dX->GetBinContent(i,j,k) - combine_dX->GetBinContent(i+1,j,k) ) << std::endl;
+                   // std::cout << "Diff After: "  << ( << std::endl;
+                    
+                                                     h_diffX->Fill(weightX*combine_dX->GetBinContent(i,j,k) - combine_dX->GetBinContent(i+1,j,k) );
+                    
+                   float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                   float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                   float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                   
+                   smooth_dX->SetBinContent(i,j,k, smoothX);
+                   smooth_dY->SetBinContent(i,j,k, smoothY);
+                   smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                   if(smoothX > 100.0)
+                       ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                else if(doEdgeSmoothing && atXUpperBoundary){
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i-1);
+                    pointTwo.push_back(j);
+                    pointTwo.push_back(k);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::xAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::xAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::xAxis);
+                    
+                    float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                    float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                    float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                    if(smoothX > 100.0)
+                        ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                else if(doEdgeSmoothing && atYLowerBoundary){
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i);
+                    pointTwo.push_back(j+1);
+                    pointTwo.push_back(k);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::yAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::yAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::yAxis);
+                    
+                    float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                    float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                    float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                    if(smoothX > 100.0)
+                        ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                else if(doEdgeSmoothing && atYUpperBoundary){
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i);
+                    pointTwo.push_back(j-1);
+                    pointTwo.push_back(k);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::yAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::yAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::yAxis);
+                    
+                    float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                    float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                    float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                    if(smoothX > 100.0)
+                        ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                else if(doEdgeSmoothing && atZLowerBoundary){
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i);
+                    pointTwo.push_back(j);
+                    pointTwo.push_back(k+1);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::zAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::zAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::zAxis);
+                    
+                    float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                    float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                    float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                    if(smoothX > 100.0)
+                        ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                else if(doEdgeSmoothing && atZUpperBoundary){
+                    std::vector<int> pointOne;
+                    pointOne.push_back(i);
+                    pointOne.push_back(j);
+                    pointOne.push_back(k);
+                    
+                    std::vector<int> pointTwo;
+                    pointTwo.push_back(i);
+                    pointTwo.push_back(j);
+                    pointTwo.push_back(k-1);
+                    
+                    float weightX = SmoothBoundary(combine_dX, combine_dX, pointOne, pointTwo, axisType::zAxis);
+                    float weightY = SmoothBoundary(combine_dY, combine_dY, pointOne, pointTwo, axisType::zAxis);
+                    float weightZ = SmoothBoundary(combine_dZ, combine_dZ, pointOne, pointTwo, axisType::zAxis);
+                    
+                    float smoothX = weightX*combine_dX->GetBinContent(i,j,k);
+                    float smoothY = weightY*combine_dY->GetBinContent(i,j,k);
+                    float smoothZ = weightZ*combine_dZ->GetBinContent(i,j,k);
+                    
+                    h_weightsX->Fill(weightX);
+                    h_weightsY->Fill(weightY);
+                    h_weightsZ->Fill(weightZ);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                    if(smoothX > 100.0)
+                        ++fitFailures;
+                    if(smoothY > 100.0)
+                        ++fitFailures;
+                    if(smoothZ > 100.0)
+                        ++fitFailures;
+                }
+                
+                
+                else if(doTriLinSmoothing && (i < highX+1 && i > lowX-1 && k > lowZ-1 && k < highZ+1 && j > lowY-1 && j < highY+1) ){
+                    std::vector<int> point;
+                    point.push_back(i);
+                    point.push_back(j);
+                    point.push_back(k);
+                    
+                    float smoothX = TrilinInterp(combine_dX, point);
+                    float smoothY = TrilinInterp(combine_dY, point);
+                    float smoothZ = TrilinInterp(combine_dZ, point);
+                    
+                    smooth_dX->SetBinContent(i,j,k, smoothX);
+                    smooth_dY->SetBinContent(i,j,k, smoothY);
+                    smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                    
+                   
+                }
+                
+                else{
+                    smooth_dX->SetBinContent(i,j,k, combine_dX->GetBinContent(i,j,k));
+                    smooth_dY->SetBinContent(i,j,k, combine_dY->GetBinContent(i,j,k));
+                    smooth_dZ->SetBinContent(i,j,k, combine_dZ->GetBinContent(i,j,k));
+                }
+            }
+        }
+    }
+    
+    /*
+    for(int i =1; i < startX; i++){
+     
+        for(int j = 1; j < startY; j++){
+            for(int k = 1; k < startZ; k++){
+                //std::cout << i << " " << j << " " << k << " " <<  combine_dX->GetBinContent(i,j,k) << std::endl;
+                smooth_dX->SetBinContent(i,j,k, combine_dX->GetBinContent(i,j,k));
+                smooth_dY->SetBinContent(i,j,k, combine_dY->GetBinContent(i,j,k));
+                smooth_dZ->SetBinContent(i,j,k, combine_dZ->GetBinContent(i,j,k));
+     
+            }
+        }
+    }
+    
+    for(int i = startX; i <= stopX; i++){
+        
+        for(int j = startY; j <= stopY; j++){
+            for(int k = startZ; k <= stopZ; k++){
+                std::vector<int> point;
+                point.push_back(i);
+                point.push_back(j);
+                point.push_back(k);
+                
+                float smoothX = TrilinInterp(combine_dX, point);
+                float smoothY = TrilinInterp(combine_dY, point);
+                float smoothZ = TrilinInterp(combine_dZ, point);
+                
+                smooth_dX->SetBinContent(i,j,k, smoothX);
+                smooth_dY->SetBinContent(i,j,k, smoothY);
+                smooth_dZ->SetBinContent(i,j,k, smoothZ);
+                
+                
+            }
+        }
+    }
+    
+    for(int i =stopX+1; i <= smooth_dX->GetNbinsX(); i++){
+     
+        for(int j = stopY+1; j <= smooth_dX->GetNbinsY(); j++){
+            for(int k = stopZ+1; k <= smooth_dX->GetNbinsZ(); k++){
+                smooth_dX->SetBinContent(i,j,k, combine_dX->GetBinContent(i,j,k));
+                smooth_dY->SetBinContent(i,j,k, combine_dY->GetBinContent(i,j,k));
+                smooth_dZ->SetBinContent(i,j,k, combine_dZ->GetBinContent(i,j,k));
+            }
+        }
+    }
+    */
+   
+    for(int k = 1; k <= smooth_dX->GetNbinsZ(); k++){
+        TH2F combine_2D_dX(Form("combined_2D_dX_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F combine_2D_dY(Form("combined_2D_dY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F combine_2D_dZ(Form("combined_2D_dZ_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        
+        for(int i = 1; i <= combine_dX->GetNbinsX(); i++){
+            for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+                combine_2D_dX.SetBinContent(i,j,smooth_dX->GetBinContent(i,j,k));
+                combine_2D_dY.SetBinContent(i,j,smooth_dY->GetBinContent(i,j,k));
+                combine_2D_dZ.SetBinContent(i,j,smooth_dZ->GetBinContent(i,j,k));
+                
+                
+            }
+        }
+        drawPlanarPlot(combine_2D_dX, k, "Smoothed #DeltaX", "smooth_2D_dX", axisType::zAxis, 5.0);
+        drawPlanarPlot(combine_2D_dY, k, "Smoothed #DeltaY", "smooth_2D_dY", axisType::zAxis);
+        drawPlanarPlot(combine_2D_dZ, k, "Smoothed #DeltaZ", "smooth_2D_dZ", axisType::zAxis);
+    }
+    
+    for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+        TH2F combine_2D_dX(Form("combined_2D_dX_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F combine_2D_dY(Form("combined_2D_dY_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F combine_2D_dZ(Form("combined_2D_dZ_%d",j),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        
+        for(int i = 1; i <= combine_dX->GetNbinsX(); i++){
+            for(int k = 1; k <= combine_dX->GetNbinsZ(); k++){
+                //if(i == 5 && j == 7 && k == 20)
+                //    std::cout << i << " " << j << " " << k << " " <<  smooth_dX->GetBinContent(i,j,k) << std::endl;
+                combine_2D_dX.SetBinContent(k,i,smooth_dX->GetBinContent(i,j,k));
+                combine_2D_dY.SetBinContent(k,i,smooth_dY->GetBinContent(i,j,k));
+                combine_2D_dZ.SetBinContent(k,i,smooth_dZ->GetBinContent(i,j,k));
+                
+                
+            }
+        }
+        drawPlanarPlot(combine_2D_dX, j, "Smoothed #DeltaX", "smooth_2D_dX", axisType::yAxis, 5.0);
+        drawPlanarPlot(combine_2D_dY, j, "Smoothed #DeltaY", "smooth_2D_dY", axisType::yAxis);
+        drawPlanarPlot(combine_2D_dZ, j, "Smoothed #DeltaZ", "smooth_2D_dZ", axisType::yAxis);
+    }
+    
+    TCanvas *can = new TCanvas(Form("can_orig"),"",600,600);
+    
+    gStyle->SetTitleW(0.9);
+    gStyle->SetOptStat(0);
+    
+    h_weightsX->SetLineWidth(2.0);
+    h_weightsX->SetLineColor(kBlack);
+    h_weightsX->GetXaxis()->SetTitle("Weight Applied");
+    std::cout << "X Weights: " << h_weightsX->Integral() << std::endl;
+    h_weightsX->GetXaxis()->SetRangeUser(-1.0, 3.0);
+    h_weightsX->Draw("hist");
+    can->SaveAs("WeightsOnX.png");
+    can->Update();
+    can->Clear();
+    
+    h_weightsY->SetLineWidth(2.0);
+    h_weightsY->SetLineColor(kBlack);
+    h_weightsY->GetXaxis()->SetTitle("Weight Applied");
+    std::cout << "Y Weights: " << h_weightsY->Integral() << std::endl;
+    //h_weightsY->Rebin(10);
+    h_weightsY->GetXaxis()->SetRangeUser(-1.0, 3.0);
+    h_weightsY->Draw("hist");
+    can->SaveAs("WeightsOnY.png");
+    can->Update();
+    can->Clear();
+    
+    h_weightsZ->SetLineWidth(2.0);
+    h_weightsZ->SetLineColor(kBlack);
+    h_weightsZ->GetXaxis()->SetTitle("Weight Applied");
+    std::cout << "Z Weights: " << h_weightsZ->Integral() << std::endl;
+    //h_weightsZ->Rebin(10);
+    h_weightsZ->GetXaxis()->SetRangeUser(-1.0, 3.0);
+    h_weightsZ->Draw("hist");
+    can->SaveAs("WeightsOnZ.png");
+    can->Update();
+    can->Clear();
+    
+    
+    h_diffX->SetLineWidth(2.0);
+    h_diffX->SetLineColor(kBlack);
+    h_diffX->GetXaxis()->SetTitle("Difference Across X Boundary (cm)");
+    //std::cout << "Z Weights: " << h_weightsZ->Integral() << std::endl;
+    //h_weightsZ->Rebin(10);
+    h_diffX->GetXaxis()->SetRangeUser(-0.2, 0.2);
+    h_diffX->Draw("hist");
+    can->SaveAs("DiffX.png");
+    can->Update();
+    can->Clear();
+    
+
+    
+    outputHistos->Write();
+    outputHistos->Close();
+    std::cout << "Fit Failures: " << fitFailures << std::endl;
+}
+
+void eFieldCalculator::makeSmoothMapPlots(){
+    double stops[5] = {0.00,0.34,0.61,0.84,1.00};
+    double red[5] = {0.00,0.00,0.87,1.00,0.51};
+    double green[5] = {0.00,0.81,1.00,0.20,0.00};
+    double blue[5] = {0.51,1.00,0.12,0.00,0.00};
+    int   zCuts[2] = {9, 17};
+    TColor::CreateGradientColorTable(5,stops,red,green,blue,255);
+    gStyle->SetNumberContours(255);
+    
+    TFile* fileData = new TFile("MergedMapsSmoothCosmicAndLaserV1098Median.root");
     TH3F* fwd_data_dX = (TH3F*) fileData->Get("combined_fwd_dX");
     TH3F* fwd_data_dY = (TH3F*) fileData->Get("combined_fwd_dY");
     TH3F* fwd_data_dZ = (TH3F*) fileData->Get("combined_fwd_dZ");
@@ -120,17 +561,17 @@ void eFieldCalculator::makeFwdMapPlots(){
             {
                 
                
-               data_2D_dX.SetBinContent(i,j,-1.0*fwd_data_dX->GetBinContent(i,j,k));
-               data_2D_dY.SetBinContent(i,j,-1.0*fwd_data_dY->GetBinContent(i,j,k));
-               data_2D_dZ.SetBinContent(i,j,-1.0*fwd_data_dZ->GetBinContent(i,j,k));
+               data_2D_dX.SetBinContent(i,j,fwd_data_dX->GetBinContent(i,j,k));
+               data_2D_dY.SetBinContent(i,j,fwd_data_dY->GetBinContent(i,j,k));
+               data_2D_dZ.SetBinContent(i,j,fwd_data_dZ->GetBinContent(i,j,k));
                 
                 
             }
         }
         
-        drawPlanarPlot(data_2D_dX, k, "Data -1.0*dX (fwd)", "data_Fwd_dX", axisType::zAxis);
-        drawPlanarPlot(data_2D_dY, k, "Data -1.0*dY (fwd)", "data_Fwd_dY", axisType::zAxis);
-        drawPlanarPlot(data_2D_dZ, k, "Data -1.0*dZ (fwd)", "data_Fwd_dZ", axisType::zAxis);
+        drawPlanarPlot(data_2D_dX, k, "Data dX (smooth)", "data_smooth_dX", axisType::zAxis, 5.0);
+        drawPlanarPlot(data_2D_dY, k, "Data dY (smooth)", "data_smooth_dY", axisType::zAxis, 5.0);
+        drawPlanarPlot(data_2D_dZ, k, "Data dZ (smooth)", "data_smooth_dZ", axisType::zAxis, 5.0);
         
         
     }
@@ -149,21 +590,170 @@ void eFieldCalculator::makeFwdMapPlots(){
                 
                 
                 
-              data_2D_dX.SetBinContent(j,i,-1.0*fwd_data_dX->GetBinContent(i,k,j));
-              data_2D_dY.SetBinContent(j,i,-1.0*fwd_data_dY->GetBinContent(i,k,j));
-              data_2D_dZ.SetBinContent(j,i,-1.0*fwd_data_dZ->GetBinContent(i,k,j));
+              data_2D_dX.SetBinContent(j,i,fwd_data_dX->GetBinContent(i,k,j));
+              data_2D_dY.SetBinContent(j,i,fwd_data_dY->GetBinContent(i,k,j));
+              data_2D_dZ.SetBinContent(j,i,fwd_data_dZ->GetBinContent(i,k,j));
                 
                 
             }
         }
         
-        drawPlanarPlot(data_2D_dX, k, "Data -1.0*dX (fwd)", "data_Fwd_dX", axisType::yAxis);
-        drawPlanarPlot(data_2D_dY, k, "Data -1.0*dY (fwd)", "data_Fwd_dY", axisType::yAxis);
-        drawPlanarPlot(data_2D_dZ, k, "Data -1.0*dZ (fwd)", "data_Fwd_dZ", axisType::yAxis);
+        drawPlanarPlot(data_2D_dX, k, "Data dX (smooth)", "data_smooth_dX", axisType::yAxis, 5.0);
+        drawPlanarPlot(data_2D_dY, k, "Data dY (smooth)", "data_smooth_dY", axisType::yAxis, 5.0);
+        drawPlanarPlot(data_2D_dZ, k, "Data dZ (smooth)", "data_smooth_dZ", axisType::yAxis, 5.0);
         
         
     }
     
+}
+
+void eFieldCalculator::makeFwdMapPlots(){
+    TFile* fileData = new TFile("/uboone/data/users/joelam/SCEInputFiles/TrueDist-N3-S50_laserdata_v1098_fwd.root");
+    TH3F* fwd_data_dX = (TH3F*) fileData->Get("Reco_Displacement_X");
+    TH3F* fwd_data_dY = (TH3F*) fileData->Get("Reco_Displacement_Y");
+    TH3F* fwd_data_dZ = (TH3F*) fileData->Get("Reco_Displacement_Z");
+    
+    TFile* fileInv = new TFile("/uboone/data/users/joelam/SCEDistortionMaps/MergedFwdMapsSmoothCosmicAndLaserNoDriftVVolumeSmoothed.root");
+    TH3F* fwd_inv_dX = (TH3F*) fileInv->Get("combined_fwd_dX");
+    TH3F* fwd_inv_dY = (TH3F*) fileInv->Get("combined_fwd_dY");
+    TH3F* fwd_inv_dZ = (TH3F*) fileInv->Get("combined_fwd_dZ");
+    
+    TH1F *h_dX_diff = new TH1F("dX_diff", "Difference Between Inverted - Measured Fwd. (#Delta X) Map", 1000, -5.0, 5.0);
+    TH1F *h_dY_diff = new TH1F("dY_diff", "Difference Between Inverted - Measured Fwd. (#Delta Y) Map", 1000, -5.0, 5.0);
+    TH1F *h_dZ_diff = new TH1F("dZ_diff", "Difference Between Inverted - Measured Fwd. (#Delta Z) Map", 1000, -5.0, 5.0);
+    
+    /*const int startX = 6;
+    const int endX   = 21;
+    const int startY = 8;
+    const int endY   = 19;
+    const int startZ = 21;
+    const int endZ   = 71;*/
+    
+    const int startX = 1;
+    const int endX   = fwd_inv_dX->GetNbinsX();
+    const int startY = 1;
+    const int endY   = fwd_inv_dX->GetNbinsY();
+    const int startZ = 1;
+    const int endZ   = fwd_inv_dX->GetNbinsZ();
+    
+    for(Int_t k = startZ; k <= endZ; k++) {
+        TH2F data_2D_dX(Form("dataFwd_2D_dX_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F data_2D_dY(Form("dataFwd_2D_dY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F data_2D_dZ(Form("dataFwd_2D_dZ_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        
+        TH2F inv_2D_dX(Form("invFwd_2D_dX_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F inv_2D_dY(Form("invFwd_2D_dY_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        TH2F inv_2D_dZ(Form("invFwd_2D_dZ_%d",k),"",nCalibDivisions_x+1,xMin,xMax,nCalibDivisions_y+1,yMin,yMax);
+        
+        for(Int_t i = startX; i <= endX; i++)
+        {
+            for(Int_t j = startY; j <= endY; j++)
+            {
+                
+                
+                data_2D_dX.SetBinContent(i,j,1.0*fwd_data_dX->GetBinContent(i,j,k));
+                data_2D_dY.SetBinContent(i,j,1.0*fwd_data_dY->GetBinContent(i,j,k));
+                data_2D_dZ.SetBinContent(i,j,1.0*fwd_data_dZ->GetBinContent(i,j,k));
+                
+                inv_2D_dX.SetBinContent(i,j,1.0*fwd_inv_dX->GetBinContent(i,j,k));
+                inv_2D_dY.SetBinContent(i,j,1.0*fwd_inv_dY->GetBinContent(i,j,k));
+                inv_2D_dZ.SetBinContent(i,j,1.0*fwd_inv_dZ->GetBinContent(i,j,k));
+                
+                h_dX_diff->Fill(fwd_inv_dX->GetBinContent(i,j,k) - fwd_data_dX->GetBinContent(i,j,k));
+                h_dY_diff->Fill(fwd_inv_dY->GetBinContent(i,j,k) - fwd_data_dY->GetBinContent(i,j,k));
+                h_dZ_diff->Fill(fwd_inv_dZ->GetBinContent(i,j,k) - fwd_data_dZ->GetBinContent(i,j,k));
+                
+                
+            }
+        }
+        
+        drawPlanarPlot(data_2D_dX, k, "Data dX (fwd)", "data_Fwd_dX", axisType::zAxis, 5.0);
+        drawPlanarPlot(data_2D_dY, k, "Data dY (fwd)", "data_Fwd_dY", axisType::zAxis, 5.0);
+        drawPlanarPlot(data_2D_dZ, k, "Data dZ (fwd)", "data_Fwd_dZ", axisType::zAxis, 5.0);
+        
+        drawPlanarPlot(inv_2D_dX, k, "Inverted dX (fwd)", "inv_Fwd_dX", axisType::zAxis, 5.0);
+        drawPlanarPlot(inv_2D_dY, k, "Inverted dY (fwd)", "inv_Fwd_dY", axisType::zAxis, 5.0);
+        drawPlanarPlot(inv_2D_dZ, k, "Inverted dZ (fwd)", "inv_Fwd_dZ", axisType::zAxis, 5.0);
+        
+        
+    }
+    
+    for(Int_t k = startY; k <= endY; k++)
+    {
+        TH2F data_2D_dX(Form("dataFwd_2D_dX_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F data_2D_dY(Form("dataFwd_2D_dY_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F data_2D_dZ(Form("dataFwd_2D_dZ_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        
+        TH2F inv_2D_dX(Form("invFwd_2D_dX_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F inv_2D_dY(Form("invFwd_2D_dY_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        TH2F inv_2D_dZ(Form("invFwd_2D_dZ_%d",k),"",nCalibDivisions_z+1,zMin,zMax,nCalibDivisions_x+1,xMin,xMax);
+        
+        
+        for(Int_t i = startX; i <= endX; i++)
+        {
+            for(Int_t j = startZ; j <= endZ; j++)
+            {
+                
+                
+                
+                data_2D_dX.SetBinContent(j,i,1.0*fwd_data_dX->GetBinContent(i,k,j));
+                data_2D_dY.SetBinContent(j,i,1.0*fwd_data_dY->GetBinContent(i,k,j));
+                data_2D_dZ.SetBinContent(j,i,1.0*fwd_data_dZ->GetBinContent(i,k,j));
+                
+                inv_2D_dX.SetBinContent(j,i,1.0*fwd_inv_dX->GetBinContent(i,k,j));
+                inv_2D_dY.SetBinContent(j,i,1.0*fwd_inv_dY->GetBinContent(i,k,j));
+                inv_2D_dZ.SetBinContent(j,i,1.0*fwd_inv_dZ->GetBinContent(i,k,j));
+                
+                
+            }
+        }
+        
+        drawPlanarPlot(data_2D_dX, k, "Data dX (fwd)", "data_Fwd_dX", axisType::yAxis, 5.0);
+        drawPlanarPlot(data_2D_dY, k, "Data dY (fwd)", "data_Fwd_dY", axisType::yAxis);
+        drawPlanarPlot(data_2D_dZ, k, "Data dZ (fwd)", "data_Fwd_dZ", axisType::yAxis);
+        
+        drawPlanarPlot(inv_2D_dX, k, "Inverted dX (fwd)", "inv_Fwd_dX", axisType::yAxis, 5.0);
+        drawPlanarPlot(inv_2D_dY, k, "Inverted dY (fwd)", "inv_Fwd_dY", axisType::yAxis);
+        drawPlanarPlot(inv_2D_dZ, k, "Inverted dZ (fwd)", "inv_Fwd_dZ", axisType::yAxis);
+        
+        
+    }
+    TCanvas *can = new TCanvas(Form("can_orig"),"",600,600);
+    
+    gStyle->SetTitleW(0.9);
+    gStyle->SetOptStat("mr");
+    
+    h_dX_diff->SetLineWidth(2.0);
+    h_dX_diff->SetLineColor(kBlack);
+    h_dX_diff->GetXaxis()->SetTitle("Difference (cm)");
+    //std::cout << "X Weights: " << h_weightsX->Integral() << std::endl;
+    h_dX_diff->GetXaxis()->SetRangeUser(-1.0, 1.0);
+    h_dX_diff->Draw("hist");
+    can->SaveAs("FwdDataInvDiffdX.png");
+    can->Update();
+    can->Clear();
+    
+    h_dY_diff->SetLineWidth(2.0);
+    h_dY_diff->SetLineColor(kBlack);
+    h_dY_diff->GetXaxis()->SetTitle("Difference (cm)");
+    //std::cout << "X Weights: " << h_weightsX->Integral() << std::endl;
+    h_dY_diff->GetXaxis()->SetRangeUser(-1.0, 1.0);
+    h_dY_diff->Draw("hist");
+    can->SaveAs("FwdDataInvDiffdY.png");
+    can->Update();
+    can->Clear();
+    
+    h_dZ_diff->SetLineWidth(2.0);
+    h_dZ_diff->SetLineColor(kBlack);
+    h_dZ_diff->GetXaxis()->SetTitle("Difference (cm)");
+    //std::cout << "X Weights: " << h_weightsX->Integral() << std::endl;
+    h_dZ_diff->GetXaxis()->SetRangeUser(-1.0, 1.0);
+    h_dZ_diff->Draw("hist");
+    can->SaveAs("FwdDataInvDiffdZ.png");
+    can->Update();
+    can->Clear();
+    
+
 }
 
 void eFieldCalculator::compareCalib(bool isData)
@@ -176,13 +766,13 @@ void eFieldCalculator::compareCalib(bool isData)
   int       zRegion = 0;
   const double zMaximum = 3.0;
 
-  double stops[5] = {0.00,0.34,0.61,0.84,1.00};
+  /*double stops[5] = {0.00,0.34,0.61,0.84,1.00};
   double red[5] = {0.00,0.00,0.87,1.00,0.51};
   double green[5] = {0.00,0.81,1.00,0.20,0.00};
-  double blue[5] = {0.51,1.00,0.12,0.00,0.00};
+  double blue[5] = {0.51,1.00,0.12,0.00,0.00};*/
   int   zCuts[2] = {35, 65};
-  TColor::CreateGradientColorTable(5,stops,red,green,blue,255);
-  gStyle->SetNumberContours(255);
+  /*TColor::CreateGradientColorTable(5,stops,red,green,blue,255);
+  gStyle->SetNumberContours(255);*/
   
   std::string inputLaser;
   std::string inputCosmic;
@@ -241,7 +831,7 @@ void eFieldCalculator::compareCalib(bool isData)
   bool plotZ = false;
   double driftV = 0.0;
   if(isData)
-    driftV = -0.007;
+    driftV = 0.001;
   driftV = driftSign*driftV;
     
     
@@ -260,8 +850,8 @@ void eFieldCalculator::compareCalib(bool isData)
 	std::vector<double> laser_Ds;
 	
 	
-	double cosmic_x_correction = -i*driftV*diff_dX->GetXaxis()->GetBinWidth(i);
-    double laser_x_correction =  0.0;
+	double cosmic_x_correction = -i*driftV*cosmicDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
+    double laser_x_correction =  i*driftV*laserDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
 	
 	cosmic_Ds.push_back(cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction);
 	cosmic_Ds.push_back(cosmic_dY->GetBinContent(i,j,k));
@@ -357,13 +947,9 @@ void eFieldCalculator::compareCalib(bool isData)
     {
       for(Int_t j = 1; j <= diff_dX->GetNbinsY(); j++)
       {
-    double cosmic_x_correction = -i*driftV*diff_dX->GetXaxis()->GetBinWidth(i);
-    double laser_x_correction  = -i*driftV*diff_dX->GetXaxis()->GetBinWidth(i);
-    if(driftSign > 0.0)
-              laser_x_correction = 0.0;
-    else
-              cosmic_x_correction = 0.0;
-	
+          double cosmic_x_correction = -i*driftV*cosmicDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
+          double laser_x_correction  = -i*driftV*laserDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
+
           plotX = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)) );
 	plotY = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k)) );
 	plotZ = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k)) );
@@ -380,7 +966,7 @@ void eFieldCalculator::compareCalib(bool isData)
 	  
 	  
 	  h_diffXByRegion[zRegion]->Fill(diff_dX->GetBinContent(i,j,k));
-        std::cout << diff_dX->GetBinContent(i,j,k) << std::endl;
+        
       if(zRegion == 1 && fabs(diff_dX->GetBinContent(i,j,k)) <= maxDiff)
 	    good_dX->SetBinContent(i,j,k,1.0);
 	}
@@ -423,10 +1009,10 @@ void eFieldCalculator::compareCalib(bool isData)
 
     
     
-   drawPlanarPlot(laser_2D_dX, k, "Laser #DeltaX", "laser_2D_dX", axisType::zAxis);
+   drawPlanarPlot(laser_2D_dX, k, "Laser #DeltaX", "laser_2D_dX", axisType::zAxis, 5.0);
    drawPlanarPlot(laser_2D_dY, k, "Laser #DeltaY", "laser_2D_dY", axisType::zAxis);
    drawPlanarPlot(laser_2D_dZ, k, "Laser #DeltaZ", "laser_2D_dZ", axisType::zAxis);
-   drawPlanarPlot(cosmic_2D_dX, k, "Cosmic #DeltaX", "cosmic_2D_dX", axisType::zAxis);
+   drawPlanarPlot(cosmic_2D_dX, k, "Cosmic #DeltaX", "cosmic_2D_dX", axisType::zAxis, 5.0);
    drawPlanarPlot(cosmic_2D_dY, k, "Cosmic #DeltaY", "cosmic_2D_dY", axisType::zAxis);
    drawPlanarPlot(cosmic_2D_dZ, k, "Cosmic #DeltaZ", "cosmic_2D_dZ", axisType::zAxis);
    drawPlanarPlot(diff_2D_dX, k, "Laser-Cosmic #DeltaX", "diff_2D_dX", axisType::zAxis, zMaximum);
@@ -491,7 +1077,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffXByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dX.SaveAs("1D_plots/diff_1D_dX.png");
+  c_1D_diff_dX.SaveAs("1D_plots/XY_diff_1D_dX.png");
   
   maximum = -999.9;
   h_diffYByRegion[0]->Scale( TPC_Z / zOne);
@@ -526,7 +1112,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffYByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dY.SaveAs("1D_plots/diff_1D_dY.png");
+  c_1D_diff_dY.SaveAs("1D_plots/XY_diff_1D_dY.png");
   
   maximum = -999.9;
   h_diffZByRegion[0]->Scale( TPC_Z / zOne);
@@ -561,7 +1147,7 @@ void eFieldCalculator::compareCalib(bool isData)
       h_diffZByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dZ.SaveAs("1D_plots/diff_1D_dZ.png");
+  c_1D_diff_dZ.SaveAs("1D_plots/XY_diff_1D_dZ.png");
   
   TCanvas c_1D_goodVoxels_dX("c_godVoxels_dX", "", 1300, 900);
   c_1D_goodVoxels_dX.cd();
@@ -613,13 +1199,13 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
   int       zRegion = 0;
   const double zMaximum = 3.0;
 
-  double stops[5] = {0.00,0.34,0.61,0.84,1.00};
+  /*double stops[5] = {0.00,0.34,0.61,0.84,1.00};
   double red[5] = {0.00,0.00,0.87,1.00,0.51};
   double green[5] = {0.00,0.81,1.00,0.20,0.00};
-  double blue[5] = {0.51,1.00,0.12,0.00,0.00};
+  double blue[5] = {0.51,1.00,0.12,0.00,0.00};*/
   int   zCuts[2] = {9, 17};
-  TColor::CreateGradientColorTable(5,stops,red,green,blue,255);
-  gStyle->SetNumberContours(255);
+  /*TColor::CreateGradientColorTable(5,stops,red,green,blue,255);
+  gStyle->SetNumberContours(255);*/
   
   std::string inputLaser;
   std::string inputCosmic;
@@ -629,7 +1215,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
   }
   
   else{
-     inputLaser = "RecoCorr-N3-S50-LaserMC-2side-Anode.root";
+     inputLaser = "/uboone/data/users/joelam/SCEInputFiles/RecoCorr-N3-S50-LaserMC-2side-Anode.root";
      inputCosmic = "/uboone/data/users/joelam/SCEInputFiles/output_hists_MC_200k_Aug3_smoothed.root";
   }  
 
@@ -795,7 +1381,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       for(Int_t j = 1; j <= diff_dX->GetNbinsZ(); j++)
       {
         double cosmic_x_correction = -i*driftV*cosmicDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
-        double laser_x_correction  = -i*driftV*laserDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
+        double laser_x_correction  =  i*driftV*laserDriftVScale*diff_dX->GetXaxis()->GetBinWidth(i);
           
 	plotX = (goodLaser(laser_dX->GetBinContent(i,k,j), laser_dX_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dX->GetBinContent(i,k,j), cosmic_dX_err->GetBinContent(i,k,j)) );
 	plotY = (goodLaser(laser_dY->GetBinContent(i,k,j), laser_dY_err->GetBinContent(i,k,j)) && goodCosmic(cosmic_dY->GetBinContent(i,k,j), cosmic_dY_err->GetBinContent(i,k,j)) );
@@ -902,7 +1488,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffXByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dX.SaveAs("1D_plots/diff_1D_dX.png");
+  c_1D_diff_dX.SaveAs("1D_plots/ZX_diff_1D_dX.png");
   
   maximum = -999.9;
   h_diffYByRegion[0]->Scale( TPC_Y / zOne);
@@ -937,7 +1523,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffYByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dY.SaveAs("1D_plots/diff_1D_dY.png");
+  c_1D_diff_dY.SaveAs("1D_plots/ZX_diff_1D_dY.png");
   
   maximum = -999.9;
   h_diffZByRegion[0]->Scale( TPC_Y / zOne);
@@ -972,7 +1558,7 @@ void eFieldCalculator::compareCalibZXPlane(bool isData)
       h_diffZByRegion[i]->Draw("hist same");
   }
   legend->Draw("same");
-  c_1D_diff_dZ.SaveAs("1D_plots/diff_1D_dZ.png");
+  c_1D_diff_dZ.SaveAs("1D_plots/ZX_diff_1D_dZ.png");
   
 }
 
@@ -2147,11 +2733,11 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser, bool skipCosmic)
   std::string inputTruth;
   std::string outputName;
   if(skipLaser)
-      outputName = "MergedMapsCosmicOnlySmoothedMC.root";
+      outputName = "MergedMapsCosmicOnlySmoothed.root";
   else if(skipCosmic)
-      outputName = "MergedMapsLaserOnlyWutMC.root";
+      outputName = "MergedMapsLaserOnly.root";
   else
-      outputName = "MergedMapsCosmicAndLaser.root";
+      outputName = "MergedMapsCosmicAndLaserNoDriftV.root";
   
   if(isData){
      inputLaser = "/uboone/data/users/joelam/SCEInputFiles/RecoCorr-N3-S50_laserdata_v1098_bkwd.root";
@@ -2213,7 +2799,7 @@ void eFieldCalculator::combineMaps(bool isData, bool skipLaser, bool skipCosmic)
 	 bool useLaser  = false;
      bool goodAgreement = false;
      
-     double x_correction = -i*driftV*cosmic_dX->GetXaxis()->GetBinWidth(i);
+     double x_correction = -i*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i);
 	 
 	 useCosmic = (goodCosmic(cosmic_dX->GetBinContent(i,j,k), cosmic_dX_err->GetBinContent(i,j,k)  ) && !skipCosmic);
 	 useLaser  = (goodLaser(laser_dX->GetBinContent(i,j,k), laser_dX_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY && !skipLaser);
@@ -2594,6 +3180,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     const int lowY    = 0;
     const int highY   = 210;*/
     double driftV = 0.0;
+    const bool SmoothBoundary = true;
     
     
     //if(isData)
@@ -2609,7 +3196,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
     std::string inputTruth;
     std::string outputName;
     if(isData)
-        outputName = "MergedMapsSmoothCosmicAndLaserV1098.root";
+        outputName = "MergedMapsSmoothCosmicAndLaserNoDriftVSkip.root";
     else
         outputName = "MergedMapsSmoothCosmicAndLaserMC.root";
     
@@ -2698,7 +3285,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 atYUpperBoundary = (j == highY && i > lowX && i < highX && k > lowZ && k < highZ);
                 atZUpperBoundary = (k == highZ && i > lowX && i < highX && j > lowY && j < highY);
 
-                /*if(atXLowerBoundary || atXUpperBoundary){
+                if(SmoothBoundary && (atXLowerBoundary || atXUpperBoundary) ){
                     numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i+1,j,k) -(i+1)*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) +  laser_dX->GetBinContent(i+1,j,k)  - (i+1)*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) + cosmic_dX->GetBinContent(i-1,j,k) - (i-1)*driftV*cosmicDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) + laser_dX->GetBinContent(i-1,j,k) - (i-1)*driftV*laserDriftVScale*cosmic_dX->GetXaxis()->GetBinWidth(i) );
                     denominator = 6.0;
                     if(isData){
@@ -2715,7 +3302,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                 }
                 
-                else if(atYLowerBoundary || atYUpperBoundary){
+                else if(SmoothBoundary && (atYLowerBoundary || atYUpperBoundary) ){
                     numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j+1,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j+1,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j-1,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j-1,k) + laser_x_correction );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2733,7 +3320,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                 }
                 
-                else if(atZLowerBoundary || atZUpperBoundary){
+                else if(SmoothBoundary && (atZLowerBoundary || atZUpperBoundary) ){
                     numerator = ( cosmic_dX->GetBinContent(i,j,k) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k) + laser_x_correction + cosmic_dX->GetBinContent(i,j,k+1) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k+1) + laser_x_correction + cosmic_dX->GetBinContent(i,j,k-1) + cosmic_x_correction + laser_dX->GetBinContent(i,j,k-1) + laser_x_correction );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2749,10 +3336,10 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                  
                  
-                }*/
+                }
                 
                 
-                if(useLaser){
+                else if(useLaser){
                     numerator = (laser_dX->GetBinContent(i,j,k) + laser_x_correction);
                     denominator = 1.0;
                     if(isData){
@@ -2802,7 +3389,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 useCosmic = goodCosmic(cosmic_dY->GetBinContent(i,j,k), cosmic_dY_err->GetBinContent(i,j,k) );
                 useLaser  = (goodLaser(laser_dY->GetBinContent(i,j,k), laser_dY_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
                 
-                /*if(atXLowerBoundary || atXUpperBoundary){
+                if(SmoothBoundary && (atXLowerBoundary || atXUpperBoundary) ){
                     numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i+1,j,k) + laser_dY->GetBinContent(i+1,j,k) + cosmic_dY->GetBinContent(i-1,j,k) + laser_dY->GetBinContent(i-1,j,k) );
                     denominator = 6.0;
                     if(isData){
@@ -2819,7 +3406,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                     
                 }
                 
-                else if(atYLowerBoundary || atYUpperBoundary){
+                else if(SmoothBoundary && (atYLowerBoundary || atYUpperBoundary) ){
                     numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i,j+1,k) + laser_dY->GetBinContent(i,j+1,k) + cosmic_dY->GetBinContent(i,j-1,k) + laser_dY->GetBinContent(i,j-1,k) );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2837,7 +3424,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                 }
                 
-                else if(atZLowerBoundary || atZUpperBoundary){
+                else if(SmoothBoundary && (atZLowerBoundary || atZUpperBoundary) ){
                     numerator = ( cosmic_dY->GetBinContent(i,j,k) + laser_dY->GetBinContent(i,j,k) + cosmic_dY->GetBinContent(i,j,k+1) + laser_dY->GetBinContent(i,j,k+1) + cosmic_dY->GetBinContent(i,j,k-1) + laser_dY->GetBinContent(i,j,k-1) );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2853,9 +3440,9 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                     
                     
                     
-                }*/
+                }
                 
-                if(useLaser){
+                else if(useLaser){
                     numerator = laser_dY->GetBinContent(i,j,k);
                     denominator = 1.0;
                     if(!isData){
@@ -2903,7 +3490,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
 
                 useCosmic = goodCosmic(cosmic_dZ->GetBinContent(i,j,k), cosmic_dZ_err->GetBinContent(i,j,k) );
                 useLaser  = (goodLaser(laser_dZ->GetBinContent(i,j,k), laser_dZ_err->GetBinContent(i,j,k)) && i < highX && i >= lowX && k >= lowZ && k < highZ && j >= lowY && j < highY);
-                /*if(atXLowerBoundary || atXUpperBoundary){
+                if(SmoothBoundary && (atXLowerBoundary || atXUpperBoundary) ){
                     numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i+1,j,k) + laser_dZ->GetBinContent(i+1,j,k) + cosmic_dZ->GetBinContent(i-1,j,k) + laser_dZ->GetBinContent(i-1,j,k) );
                     denominator = 6.0;
                     if(isData){
@@ -2920,7 +3507,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                 }
                 
-                else if(atYLowerBoundary || atYUpperBoundary){
+                else if(SmoothBoundary && (atYLowerBoundary || atYUpperBoundary) ){
                     numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i,j+1,k) + laser_dZ->GetBinContent(i,j+1,k) + cosmic_dZ->GetBinContent(i,j-1,k) + laser_dZ->GetBinContent(i,j-1,k) );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2938,7 +3525,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                 }
                 
-                else if(atZLowerBoundary || atZUpperBoundary){
+                else if(SmoothBoundary && (atZLowerBoundary || atZUpperBoundary) ){
                     numerator = ( cosmic_dZ->GetBinContent(i,j,k) + laser_dZ->GetBinContent(i,j,k) + cosmic_dZ->GetBinContent(i,j,k+1) + laser_dZ->GetBinContent(i,j,k+1) + cosmic_dZ->GetBinContent(i,j,k-1) + laser_dZ->GetBinContent(i,j,k-1) );
                     denominator = 6.0;
                     //std::cout << "At Z Boundary" << std::endl;
@@ -2954,9 +3541,9 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                  
                  
                  
-                }*/
+                }
                 
-                if(useLaser){
+                else if(useLaser){
                     numerator = laser_dZ->GetBinContent(i,j,k);
                     denominator = 1.0;
                     if(!isData){
@@ -3031,7 +3618,7 @@ void eFieldCalculator::combineMaps(int lowX, int highX, int lowY, int highY, int
                 
             }
         }
-        drawPlanarPlot(combine_2D_dX, k, "Combined #DeltaX", "combined_2D_dX", axisType::zAxis);
+        drawPlanarPlot(combine_2D_dX, k, "Combined #DeltaX", "combined_2D_dX", axisType::zAxis, 5.0);
         drawPlanarPlot(combine_2D_dY, k, "Combined #DeltaY", "combined_2D_dY", axisType::zAxis);
         drawPlanarPlot(combine_2D_dZ, k, "Combined #DeltaZ", "combined_2D_dZ", axisType::zAxis);
     }
@@ -3262,16 +3849,16 @@ void eFieldCalculator::MakeDistorionTree(){
 void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
     std::string inputHistograms;
     if(isFwd)
-      inputHistograms = "MergedFwdMapsSmoothCosmicAndLaserV1098.root";
+      inputHistograms = "/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsFwdCosmicOnly.root";
     else
-      inputHistograms = "MergedMapsSmoothCosmicAndLaserV1098.root";
+      inputHistograms = "/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsCosmicOnlySmoothed.root";
     
-    std::string inputEField     = "/uboone/data/users/joelam/SCEInputFiles/Emap-NTT-1-MergedMapsSmoothCosmicAndLaserV1098_TH3.root";
+    std::string inputEField     = "/uboone/data/users/joelam/SCEInputFiles/Emap-NTT-1-MergedMapsCosmicOnlySmoothed_newCurve.root";
     std::string outputFileName;
     if(isFwd)
-      outputFileName = "SCEDistortionsMergedFwdV1098.root";
+      outputFileName = "/uboone/data/users/joelam/SCEDistortionMaps/SCEDistortionsMergedFwdCosmicOnlyE273.root";
     else
-      outputFileName = "SCEDistortionsMergedV1098.root";
+      outputFileName = "/uboone/data/users/joelam/SCEDistortionMaps/SCEDistortionsCosmicOnlyE273.root";
     TFile* fileInput = new TFile(inputHistograms.c_str());
     TFile* fileInputEField = new TFile(inputEField.c_str());
     
@@ -3286,9 +3873,9 @@ void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
     }
     
     else{
-        combine_dX = (TH3F*) fileInput->Get("combined_dX");
-        combine_dY = (TH3F*) fileInput->Get("combined_dY");
-        combine_dZ = (TH3F*) fileInput->Get("combined_dZ");
+        combine_dX = (TH3F*) fileInput->Get("Reco_Displacement_X");
+        combine_dY = (TH3F*) fileInput->Get("Reco_Displacement_Y");
+        combine_dZ = (TH3F*) fileInput->Get("Reco_Displacement_Z");
     }
     
     
@@ -3304,7 +3891,7 @@ void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
     const double kVtoVolts = 1000.0;
     const double metersTocm = 100.0;
     const double cmToMeters = 0.01;
-    const double E0 = 0.266545; // kV / cm
+    const double E0 = 0.2739; // kV / cm
     
     const int nXbins = 26;
     const int nYbins = 26;
@@ -3326,14 +3913,14 @@ void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
     TH3F *hEy = new TH3F("hEy", "hEy", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
     TH3F *hEz = new TH3F("hEz", "hEz", nXbins, minX, maxX, nYbins, minY, maxY, nZbins, minZ, maxZ);
     
-    
-    for(int i = combine_dX->GetNbinsX(); i > 0; --i){
-        int xBin = (nXbins - i)+1;
-        int xEBin = xBin;
+    if(1){
+       for(int i = combine_dX->GetNbinsX(); i > 0; --i){
+           int xBin = (nXbins - i)+1;
+           int xEBin = i;
         if(i == combine_dX->GetNbinsX())
-            xEBin = xBin + 1;
+            xEBin = xEBin - 1;
         else if(i == 1)
-            xEBin = xBin - 1;
+            xEBin = xEBin + 1;
         
         for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
             int yEBin = j;
@@ -3351,11 +3938,11 @@ void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
                double Dy = combine_dY->GetBinContent(xEBin, yEBin, zEBin);
                double Dz = combine_dZ->GetBinContent(xEBin, yEBin, zEBin);
                
-               double Ex = (E0 - E_field_X->GetBinContent(xEBin, yEBin, zEBin)) / (kVtoVolts*metersTocm*E0);
-               double Ey = E_field_Y->GetBinContent(xEBin, yEBin, zEBin) / (kVtoVolts*metersTocm*E0);
-               double Ez = E_field_Z->GetBinContent(xEBin, yEBin, zEBin) / (kVtoVolts*metersTocm*E0);
+               double Ex = (E0 - E_field_X->GetBinContent(xEBin, yEBin, zEBin));
+               double Ey = E_field_Y->GetBinContent(xEBin, yEBin, zEBin);
+               double Ez = E_field_Z->GetBinContent(xEBin, yEBin, zEBin);
                 
-                std::cout << xBin << ", " << j << ", " << k << ", " << Dx << ", " << Dy << ", " << Dz <<", " << Ex << ", " << Ey << ", " << Ez << std::endl;
+                std::cout << i << ", " << j << ", " << k << ", " << Dx << ", " << Dy << ", " << Dz <<", " << Ex << ", " << Ey << ", " << Ez << std::endl;
                 
                hDx->SetBinContent(xBin, j, k, Dx);
                hDy->SetBinContent(xBin, j, k, Dy);
@@ -3368,6 +3955,52 @@ void eFieldCalculator::MakeDistortionHistograms(bool isFwd){
 
                 //T_field_calib->Fill();
                 
+            }
+        }
+    }
+    }
+    else{
+        for(int i = 1; i <= combine_dX->GetNbinsX(); ++i){
+            int xEBin = i;
+            if(i == combine_dX->GetNbinsX())
+                xEBin = xEBin - 1;
+            else if(i == 1)
+                xEBin = xEBin + 1;
+            
+            for(int j = 1; j <= combine_dX->GetNbinsY(); j++){
+                int yEBin = j;
+                if(j == 1)
+                    yEBin = yEBin + 1;
+                else if(j == combine_dX->GetNbinsY())
+                    yEBin = yEBin - 1;
+                for(int k = 1; k <= combine_dX->GetNbinsZ(); k++){
+                    int zEBin = k;
+                    if(k == 1)
+                        zEBin = zEBin + 1;
+                    else if(k == combine_dX->GetNbinsZ())
+                        zEBin = zEBin - 1;
+                    double Dx = 1.0*combine_dX->GetBinContent(xEBin, yEBin, zEBin);
+                    double Dy = combine_dY->GetBinContent(xEBin, yEBin, zEBin);
+                    double Dz = combine_dZ->GetBinContent(xEBin, yEBin, zEBin);
+                    
+                    double Ex = (E0 - E_field_X->GetBinContent(xEBin, yEBin, zEBin));
+                    double Ey = E_field_Y->GetBinContent(xEBin, yEBin, zEBin);
+                    double Ez = E_field_Z->GetBinContent(xEBin, yEBin, zEBin);
+                    
+                    std::cout << i << ", " << j << ", " << k << ", " << Dx << ", " << Dy << ", " << Dz <<", " << Ex << ", " << Ey << ", " << Ez << std::endl;
+                    
+                    hDx->SetBinContent(i, j, k, Dx);
+                    hDy->SetBinContent(i, j, k, Dy);
+                    hDz->SetBinContent(i, j, k, Dz);
+                    
+                    hEx->SetBinContent(i, j, k, Ex);
+                    hEy->SetBinContent(i, j, k, Ey);
+                    hEz->SetBinContent(i, j, k, Ez);
+                    
+                    
+                    //T_field_calib->Fill();
+                    
+                }
             }
         }
     }
@@ -3555,7 +4188,7 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     double driftV = 0.001;
     //double driftV = 0.01; //for optimization studies
     if(isMC)
-       driftV   = 0.0;
+       driftV   = 0.15;
     const double bufferLength = 0.0;
     const double epsilon = 1e-18;
     const bool skipZeroes = false;
@@ -3731,8 +4364,8 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     
     
     std::string TrackFileName = "/uboone/data/users/mrmooney/ForJoel/output_data_tracks.root";
-    if(isMC)
-        TrackFileName = "/uboone/data/users/mrmooney/ForJoel/output_MC_tracks.root";
+   // if(isMC)
+   //     TrackFileName = "/uboone/data/users/mrmooney/ForJoel/output_MC_tracks.root";
     
     //TFile* inputFile = new TFile("output.root");
     TFile* inputFile = new TFile(TrackFileName.c_str());
@@ -3779,20 +4412,20 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
         for(int j = 0; j < dist_dX->GetNbinsY(); j++){
             for(int k = 0; k < dist_dX->GetNbinsZ(); k++){
                 corr_Dx[i][j][k] = -0.01*dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1), dist_dX_err->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1))){
+                /*if(!goodLaser(dist_dX->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1), dist_dX_err->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1))){
                     corr_Dx[i][j][k] = 0.0;
                     //std::cout << "Bad point Dx: " <<  i << " " << " " << j << " " << k << std::endl;
-                }
+                }*/
                 corr_Dy[i][j][k] = 0.01*dist_dY->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dY->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1), dist_dY_err->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1))){
+                /*if(!goodLaser(dist_dY->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1), dist_dY_err->GetBinContent(dist_dY->GetNbinsX()-i,j+1,k+1))){
                     corr_Dy[i][j][k] = 0.0;
                     //std::cout << "Bad point Dy: " <<  i << " " << " " << j << " " << k << std::endl;
-                }
+                }*/
                 corr_Dz[i][j][k] = 0.01*dist_dZ->GetBinContent(dist_dX->GetNbinsX()-i,j+1,k+1);
-                if(!goodLaser(dist_dZ->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1), dist_dZ_err->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1))){
+                /*if(!goodLaser(dist_dZ->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1), dist_dZ_err->GetBinContent(dist_dZ->GetNbinsX()-i,j+1,k+1))){
                     corr_Dz[i][j][k] = 0.0;
                     //std::cout << "Bad point Dz: " <<  i << " " << " " << j << " " << k << std::endl;
-                }
+                }*/
                 
             }
         }
@@ -4620,6 +5253,182 @@ std::vector<double> eFieldCalculator::studyResults2(std::string inputMapFileName
     return return_vec;
 }
 
+void eFieldCalculator::plotSpaceChargeBoundary(std::string inputMapFileName, std::string meanFileName){
+    bool containsLaser = false;
+    bool isMC = false;
+    
+    if(inputMapFileName.find("MC") != std::string::npos)
+        isMC = true;
+        if(inputMapFileName.find("Laser") != std::string::npos)
+            containsLaser = true;
+    
+            std::cout << "Is MC: " << isMC << " Is laser: " << containsLaser << std::endl;
+    
+            //Bin along track segments.
+            //Compare to the far edge.
+    
+    
+    
+            //Look at larger track slices
+            //const double bufferLength = 0.05*100;
+            double driftV = 0.001;
+            //double driftV = 0.01; //for optimization studies
+            if(isMC)
+               driftV   = 0.0;
+    
+            const int minTrackPoints = 75;
+            /*const int numTrackSegPoints = 15;
+            const int lastSegment       = 2;
+            const int firstSegment      = 0;
+            const int maxTrackSegments    = 1;
+            const int stepsBack           = 1;
+            const int maxBadPoints        = 5;*/
+    
+            TGaxis::SetMaxDigits(3);
+    
+
+    
+           /* const double xLow  = 0.0;
+            const double xHigh = Lx;
+            const double yLow = 0.0;
+            const double yHigh = Ly;
+    
+            const double zLow = 0.0;
+            const double zHigh = Lz;*/
+    
+            TFile *distortionMapInput = new TFile(inputMapFileName.c_str());
+    
+            TH3F* dist_dX  = (TH3F*) distortionMapInput->Get("Reco_Displacement_X");
+            TH3F* dist_dY  = (TH3F*) distortionMapInput->Get("Reco_Displacement_Y");
+            TH3F* dist_dZ  = (TH3F*) distortionMapInput->Get("Reco_Displacement_Z");
+    
+            TH3F* dist_dX_err = (TH3F*) distortionMapInput->Get("Reco_Displacement_X_Error");
+            TH3F* dist_dY_err = (TH3F*) distortionMapInput->Get("Reco_Displacement_Y_Error");
+            TH3F* dist_dZ_err = (TH3F*) distortionMapInput->Get("Reco_Displacement_Z_Error");
+    
+            std::string TrackFileName = "/uboone/data/users/mrmooney/ForJoel/output_data_tracks.root";
+            if(isMC)
+               TrackFileName = "/uboone/data/users/mrmooney/ForJoel/output_MC_tracks.root";
+    
+            TFile* inputFile = new TFile(TrackFileName.c_str());
+
+    
+    
+            TTreeReader readerTracks("SpaCEtree_tracks", inputFile);
+            TTreeReaderValue<Int_t> nElec_tracks(readerTracks, "nElec_tracks");
+            TTreeReaderArray<Double_t> elecX_tracks_orig(readerTracks, "elecX_tracks");
+            TTreeReaderArray<Double_t> elecY_tracks_orig(readerTracks, "elecY_tracks");
+            TTreeReaderArray<Double_t> elecZ_tracks_orig(readerTracks, "elecZ_tracks");
+    
+            //std::cout << dist_dX->GetNbinsX() << " " << dist_dX->GetNbinsY() << " " << dist_dX->GetNbinsZ() << std::endl;
+            TFile* fileMeans = new TFile(meanFileName.c_str(), "RECREATE");
+    
+            TH3F* h_tpcVolume = new TH3F("tpcVolume","",1000,0,10.0,250,0,2.5,250,0,2.5);
+            TH3F* h_spaceChargeVolume = new TH3F("spaceChargeVolume","",1000,0,10.0,250,0,2.5,250,0,2.5);
+    
+            TH2F *h_tpcVolume_XY = new TH2F("tpcVolume_XY", "", 250,0,2.5,250,0,2.5);
+            TH2F *h_spaceChargeVolume_XY = new TH2F("spaceChargeVolume_XY", "", 250,0,2.5,250,0,2.5);
+    
+            TH2F *h_tpcVolume_YZ = new TH2F("tpcVolume_YZ", "", 1000,0,10.0,250,0,2.5);
+            TH2F *h_spaceChargeVolume_YZ = new TH2F("spaceChargeVolume_YZ", "", 1000,0,10.0,250,0,2.5);
+    
+            TH2F *h_tpcVolume_XZ = new TH2F("tpcVolume_XZ", "", 1000,0,10.0,250,0,2.5);
+            TH2F *h_spaceChargeVolume_XZ = new TH2F("spaceChargeVolume_XZ", "", 1000,0,10.0,250,0,2.5);
+    
+            h_tpcVolume_XY->SetMarkerColor(kRed);
+            h_tpcVolume_XY->SetLineColor(kRed);
+            h_tpcVolume_XY->SetLineWidth(2.0);
+            h_tpcVolume_XY->GetXaxis()->SetTitle("Distance from Cathode (m)");
+            h_tpcVolume_XY->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+            h_spaceChargeVolume_XY->SetLineColor(kGreen+2);
+            h_spaceChargeVolume_XY->SetMarkerColor(kGreen+2);
+            h_spaceChargeVolume_XY->SetLineWidth(2.0);
+            h_spaceChargeVolume_XY->GetXaxis()->SetTitle("Distance from Cathode (m)");
+            h_spaceChargeVolume_XY->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+    
+            h_tpcVolume_YZ->SetMarkerColor(kRed);
+            h_tpcVolume_YZ->GetXaxis()->SetTitle("Distance from TPC Endcap (m)");
+            h_tpcVolume_YZ->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+            h_spaceChargeVolume_YZ->SetMarkerColor(kGreen+2);
+            h_spaceChargeVolume_YZ->GetXaxis()->SetTitle("Distance from TPC Endcap (m)");
+            h_spaceChargeVolume_YZ->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+    
+            h_tpcVolume_XZ->SetMarkerColor(kRed);
+            h_tpcVolume_XZ->GetXaxis()->SetTitle("Distance from TPC Endcap (m)");
+            h_tpcVolume_XZ->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+            h_spaceChargeVolume_XZ->SetMarkerColor(kGreen+2);
+            h_spaceChargeVolume_XZ->GetXaxis()->SetTitle("Distance from TPC Endcap (m)");
+            h_spaceChargeVolume_XZ->GetYaxis()->SetTitle("Distance from TPC Bottom (m)");
+    
+            TLegend *legend = new TLegend(0.1, 0.3, 0.5, 0.55);
+            legend->AddEntry(h_tpcVolume_XY, "No Space Charge Correction", "l");
+            legend->AddEntry(h_spaceChargeVolume_XY, "With Space Charge Correction", "l");
+    
+    
+    
+    
+    
+            int counter = 0;
+            while ((readerTracks.Next()) && (counter < 213000)){
+              //std::cout << "Go go go" << std::endl;
+              if(counter % 10000 == 0) {std::cout << counter << std::endl;}
+                counter++;
+                
+            
+                if(*nElec_tracks >= minTrackPoints) {
+                    
+                    std::vector<double> elecX_tracks;
+                    std::vector<double> elecY_tracks;
+                    std::vector<double> elecZ_tracks;
+                    
+                    for(int i = 0; i < *nElec_tracks; i++){
+                        //std::vector<double> points_laser;
+                        //std::vector<double> points_cosmic;
+                        double driftVFactor = cosmicDriftVScale;
+                       
+                        const double pointOffset = driftV*cosmicDriftVScale*(Lx-elecX_tracks_orig[i]);
+                        
+                        elecX_tracks.push_back(elecX_tracks_orig[i]  + pointOffset);
+                        elecY_tracks.push_back(elecY_tracks_orig[i]);
+                        elecZ_tracks.push_back(elecZ_tracks_orig[i]);
+                        
+                        int point = i;
+                        
+                        //Only interested in top / bottom of cathode
+                        if(elecX_tracks[point] > 2.75 || (elecY_tracks[point] > 0.5 && elecY_tracks[point] < 2.0 ) || (elecZ_tracks[point] > 1.5 && elecZ_tracks[point] < 8.5 )  )
+                            continue;
+                        
+                        h_tpcVolume->Fill(elecZ_tracks[point], elecX_tracks[point], elecY_tracks[point]);
+                        h_tpcVolume_XY->Fill(elecX_tracks[point], elecY_tracks[point]);
+                        h_tpcVolume_XZ->Fill(elecZ_tracks[point], elecX_tracks[point]);
+                        h_tpcVolume_YZ->Fill(elecY_tracks[point], elecZ_tracks[point]);
+                        
+                        float xDistortion = -0.01*dist_dX->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
+                        float yDistortion = 0.01*dist_dY->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
+                        float zDistortion = 0.01*dist_dZ->Interpolate(doInvCoordTransformX(elecX_tracks[point]), doInvCoordTransformY(elecY_tracks[point]), doInvCoordTransformZ(elecZ_tracks[point]));
+                        h_spaceChargeVolume->Fill((elecZ_tracks[point]+zDistortion), (elecX_tracks[point]+xDistortion), (elecY_tracks[point]+yDistortion));
+                        
+                        h_spaceChargeVolume_XY->Fill(elecX_tracks[point]+xDistortion, elecY_tracks[point]+yDistortion);
+                        h_spaceChargeVolume_XZ->Fill(elecZ_tracks[point]+zDistortion, elecX_tracks[point]+xDistortion);
+                        h_spaceChargeVolume_YZ->Fill(elecY_tracks[point]+yDistortion, elecZ_tracks[point]+zDistortion);
+                       
+                   }//end of loop over track points
+                }//end of if nElec_tracks
+            }//end of while loop
+    gStyle->SetOptStat(0);
+    TCanvas can("can", "", 600, 600);
+    h_spaceChargeVolume_XY->Draw();
+    h_tpcVolume_XY->Draw("same");
+    
+    legend->Draw("same");
+    can.SaveAs("SpaceChargeVolumeXY.png");
+    
+    
+    fileMeans->Write();
+    fileMeans->Close();
+    return;
+}
+
 void eFieldCalculator::compareDataMC(std::string inputData, std::string inputMC, std::string outputTag){
 
     TFile *data   = new TFile(inputData.c_str());
@@ -4692,6 +5501,7 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     const double epsilon = 1e-10;
     const int    pointReduction = 10;
     const int TailDivisions = 5;
+    const int TailBin = 1;
     const double TailValue[TailDivisions] = {1.0, 2.0, 4.0, 6.0, 8.0};
     int badPoints_up = 0;
     int badPoints_down = 0;
@@ -4711,7 +5521,7 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
         containsLaser = true;
     if(isMC)
         driftV = 0.0;
-    if(containsLaser && !isMC)
+    else
         driftV = 0.015;
     
     
@@ -4819,6 +5629,9 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     TH2F *h_tracksXZ = new TH2F("tracksXZ", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_x+1,xMin,xMax);
     TH2F *h_tracksZY = new TH2F("tracksZY", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_y+1,yMin,yMax);
+    
+    TH2F *h_tracksXZInTail = new TH2F("tracksXZInTail", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_x+1,xMin,xMax);
+    TH2F *h_tracksZYInTail = new TH2F("tracksZYInTail", "Tracks XZ", 100*nCalibDivisions_z+1,zMin,zMax,100*nCalibDivisions_y+1,yMin,yMax);
     
     TH2F *h_tracksXZ_tail[TailDivisions];
     TH2F *h_tracksZY_tail[TailDivisions];
@@ -5006,15 +5819,21 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
                 h_tracksXZ->Fill(TrackSamples[i][2],TrackSamples[i][0]);
                 h_tracksZY->Fill(TrackSamples[i][2],TrackSamples[i][1]);
                 h_tracks->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
+                
+                if(residual > TailValue[TailBin]){
+                    h_tracksXZInTail->Fill(TrackSamples[i][2],TrackSamples[i][0]);
+                    h_tracksZYInTail->Fill(TrackSamples[i][2],TrackSamples[i][1]);
+                }
+                
                 for(int bin=0; bin < TailDivisions; ++bin){
                     //std::cout << TailValue[i] << std::endl;
-                   if(residual > TailValue[bin]){
-                     h_tracksXZ_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][0]);
-                     h_tracksZY_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][1]);
+                     if(residual > TailValue[bin]){
+                        h_tracksXZ_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][0]);
+                        h_tracksZY_tail[bin]->Fill(TrackSamples[i][2],TrackSamples[i][1]);
                      //h_tracks_tail->Fill(TrackSamples[i][0], TrackSamples[i][1], TrackSamples[i][2]);
                     
-                  }
                 }
+              }
                 
             } //end of loop over track pointss
             
@@ -5069,6 +5888,7 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     std::cout << "Bad points (too big): " << badPoints_up << std::endl;
     std::cout << "Bad points (too small): " << badPoints_down << std::endl;
     std::cout << "Out of Fiducial Hits: " << oov_Hits << std::endl;
+    std::cout << "Mean before correction: " <<  h1->GetMean() << std::endl;
     std::cout << "Mean after correction: " <<  h2->GetMean() << std::endl;
     
     return_vec.push_back(h2->GetMean());
@@ -5098,6 +5918,9 @@ std::vector<double> eFieldCalculator::Residual_afterTrackCorr(std::string inputM
     
     drawPlanarPlot(h_tracksXZ, 0, "Laser Tracks", "LaserTracksZX", axisType::yAxis);
     drawPlanarPlot(h_tracksZY, 0, "Laser Tracks", "LaserTracksZY", axisType::xAxis);
+    
+    drawPlanarPlot(h_tracksXZInTail, 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[TailBin]), Form("LaserTracksZXInTail"), axisType::yAxis);
+    drawPlanarPlot(h_tracksZYInTail, 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[TailBin]), Form("LaserTracksZYInTail"), axisType::xAxis);
     for(int i=0; i < TailDivisions; ++i){
       drawPlanarPlot(h_tracksXZ_tail[i], 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[i]), Form("LaserTracksZXInTail%d", i), axisType::yAxis);
       drawPlanarPlot(h_tracksZY_tail[i], 0, Form("Laser Tracks Reisdual > %.2f cm", TailValue[i]), Form("LaserTracksZYInTail%d", i), axisType::xAxis);
@@ -5119,18 +5942,30 @@ void eFieldCalculator::makeCSVMap(std::string inputFileName, std::string outputF
     std::ofstream outFileZ;
     
     std::string xMapName = outputFileName + ".csv";
-    std::string yMapName = outputFileName + "dY.csv";
-    std::string zMapName = outputFileName + "dZ.csv";
-    
-    outFileX.open(xMapName.c_str());
-    outFileY.open(yMapName.c_str());
-    outFileZ.open(zMapName.c_str());
-    
 
     
-    TH3F* dist_dX  = (TH3F*) distortionMapInput->Get("combined_dX");
-    TH3F* dist_dY  = (TH3F*) distortionMapInput->Get("combined_dY");
-    TH3F* dist_dZ  = (TH3F*) distortionMapInput->Get("combined_dZ");
+    outFileX.open(xMapName.c_str());
+
+    TH3F* dist_dX  = (TH3F*) distortionMapInput->Get("Reco_Displacement_X");
+    TH3F* dist_dY  = (TH3F*) distortionMapInput->Get("Reco_Displacement_Y");
+    TH3F* dist_dZ  = (TH3F*) distortionMapInput->Get("Reco_Displacement_Z");
+    
+    const int startX = 1;
+    const int endX   = dist_dX->GetNbinsX();
+    const int startY = 1;
+    const int endY   = dist_dX->GetNbinsY();
+    const int startZ = 1;
+    const int endZ   = dist_dX->GetNbinsZ();
+    
+    /*
+    const int startX = 6;
+    const int endX   = 21;
+    const int startY = 8;
+    const int endY   = 19;
+    const int startZ = 21;
+    const int endZ   = 71;
+    */
+    
     
     double x_reco;
     double y_reco;
@@ -5143,21 +5978,23 @@ void eFieldCalculator::makeCSVMap(std::string inputFileName, std::string outputF
     double zBins[dist_dX->GetNbinsZ()];
     dist_dX->GetZaxis()->GetLowEdge(zBins);
     
-    for(Int_t i = 1; i <= dist_dX->GetNbinsX(); i++){
+    for(Int_t i = startX; i <= endX; i++){
         if(i!=dist_dX->GetNbinsX())
             x_reco = (xBins[i-1] + xBins[i])/2.0;
         else
             x_reco = 256.0;
-        for(Int_t j = 1; j <= dist_dX->GetNbinsY(); j++){
+        for(Int_t j = startY; j <= endY; j++){
             if(j != dist_dX->GetNbinsY())
                 y_reco = (yBins[j-1] + yBins[j])/2.0;
             else
                 y_reco = 116.5;
-            for(Int_t k = 1; k <= dist_dX->GetNbinsZ(); k++){
+            for(Int_t k = startZ; k <= endZ; k++){
                 if(k != dist_dX->GetNbinsZ())
                     z_reco = (zBins[k-1] + zBins[k])/2.0;
                 else
                     z_reco = 1037.0;
+                
+                
                 
                 outFileX << x_reco << ", " << y_reco << ", " << z_reco << ", " << dist_dX->GetBinContent(i, j, k) << ", " << dist_dY->GetBinContent(i, j, k)  << ", " << dist_dZ->GetBinContent(i, j, k)  << std::endl;
                 //outFileY << x_reco << ", " << y_reco << ", " << z_reco << ", " << dist_dY->GetBinContent(i, j, k) << std::endl;
@@ -5168,58 +6005,113 @@ void eFieldCalculator::makeCSVMap(std::string inputFileName, std::string outputF
     }
 }
 
+float eFieldCalculator::SmoothBoundary(TH3 *h_cosmic, TH3 *h_laser, std::vector<int> firstBin, std::vector<int> secondBin, axisType axis){
+    const double epsilon = 0.01;
+    double startingWeight = 1.0;
+    const int maxWeight = 600;
+    double returnVal = 999.9;
+    //double returnVal = 1.0;
+    double binWidth = 10.0;
+    /*
+    if(axis == axisType::xAxis){
+        binWidth = h_cosmic->GetXaxis()->GetBinWidth(firstBin[0]);
+       
+    }
+    if(axis == axisType::yAxis)
+            binWidth = h_cosmic->GetYaxis()->GetBinWidth(firstBin[1]);
+    if(axis == axisType::zAxis){
+            binWidth = h_cosmic->GetZaxis()->GetBinWidth(firstBin[2]);
+        
+    }*/
+    //First, scan from 1.0 to max weight and see if we get some convergence.
+    for(int i = 0; i <= maxWeight; ++i){
+        double weight = (double) startingWeight - 0.01*i;
+        double value = (weight*h_cosmic->GetBinContent(firstBin[0], firstBin[1], firstBin[2]) - h_laser->GetBinContent(secondBin[0], secondBin[1], secondBin[2]) ) / binWidth;
+        if(0)
+           std::cout << firstBin[0] << " " << firstBin[1] << " " <<firstBin[2] << " " << secondBin[0] << " " << secondBin[1] << " " << secondBin[2] << " " << weight << " " << value << std::endl;
+        if(fabs(value) < epsilon)
+            return weight;
+    }
+    
+    for(int i = 0; i <= maxWeight; ++i){
+        double weight = (double) startingWeight + 0.01*i;
+        double value = (weight*h_cosmic->GetBinContent(firstBin[0], firstBin[1], firstBin[2]) - h_laser->GetBinContent(secondBin[0], secondBin[1], secondBin[2]) ) / binWidth;
+        if(0)
+           std::cout << firstBin[0] << " " << firstBin[1] << " " <<firstBin[2] << " " << secondBin[0] << " " << secondBin[1] << " " << secondBin[2] << " " << weight << " " << value << std::endl;
+        if(fabs(value) < epsilon)
+            return weight;
+    }
+
+    return returnVal;
+}
+
+float eFieldCalculator::TrilinInterp(TH3 *histo, std::vector<int> centerBin){
+    //Create a dummy TH3 so I can use ROOTs TH3.
+    TH3F *dummy = new TH3F("dummy", "", 4, 0.0, 4.0, 4, 0.0, 4.0, 4, 0.0, 4.0);
+    int middleBin = 2;
+    float returnVal = -999.0;
+    //dummy->SetBinContent(middleBin,middleBin,middleBin, histo->GetBinContent(centerBin[0], centerBin[1], centerBin[2]));
+    for(int i = -1; i <= 1; ++i){
+        for(int j = -1; j <= 1; ++j){
+            for(int k = -1; k<= 1; ++k){
+                /*if(i == 0 && j == 0 && k == 0 )
+                    continue;*/
+                float something = histo->GetBinContent(centerBin[0]+i, centerBin[1]+j, centerBin[2]+k);
+                dummy->SetBinContent(middleBin+i, middleBin+j, middleBin+k, something);
+            }
+        }
+        
+    }
+    returnVal = dummy->Interpolate(2.0, 2.0, 2.0);
+    //std::cout << returnVal << " " << histo->GetBinContent(centerBin[0]-1, centerBin[1], centerBin[2]) << " " << histo->GetBinContent(centerBin[0], centerBin[1]-1, centerBin[2]) << " " << histo->GetBinContent(centerBin[0], centerBin[1], centerBin[2]-1) << " " << histo->GetBinContent(centerBin[0]-1, centerBin[1]-1, centerBin[2]) << " " << histo->GetBinContent(centerBin[0]-1, centerBin[1], centerBin[2]-1) << " " << histo->GetBinContent(centerBin[0], centerBin[1]-1, centerBin[2]-1) << " " << histo->GetBinContent(centerBin[0]-1, centerBin[1]-1, centerBin[2]-1) << " " << histo->GetBinContent(centerBin[0]+1, centerBin[1], centerBin[2]) << " " << histo->GetBinContent(centerBin[0], centerBin[1]+1, centerBin[2]) << " " << histo->GetBinContent(centerBin[0], centerBin[1], centerBin[2]+1) << " " << histo->GetBinContent(centerBin[0]+1, centerBin[1]+1, centerBin[2]) << " " << histo->GetBinContent(centerBin[0]+1, centerBin[1], centerBin[2]+1) << " " << histo->GetBinContent(centerBin[0], centerBin[1]+1, centerBin[2]+1) << " " << histo->GetBinContent(centerBin[0]+1, centerBin[1]+1, centerBin[2]+1) << " " << histo->GetBinContent(centerBin[0], centerBin[1], centerBin[2]) <<  std::endl;
+    
+    delete dummy; //begone!
+    return returnVal;
+    
+    
+    
+    
+}
+
 int main(int argc, char *argv[]){
   
   const bool doVoxIter = false;
   const bool doVelocityIter = false;
   eFieldCalculator *calculator = new eFieldCalculator();
   
-    calculator->setDriftVScale(0.0, -7.0);
-   calculator->compareCalibZXPlane(true);
-    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
+    calculator->setDriftVScale(0.0, 0.0);
+   // calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
     
-  //calculator->compareCalib(true);
-  //calculator->compareCalibZXPlane(true);
+ // calculator->compareCalib(true);
+//  calculator->compareCalibZXPlane(true);
   //calculator->compareTruth(false);
-   // calculator->doFits();
   //  calculator->combineWeightedMaps();
-  //  calculator->combineMaps(false, true, false);
-   // calculator->combineMaps(false, false, true);
-  //  calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-  //  calculator->compareFaces(true);
-  //  calculator->MakeDistorionTree();
-   // calculator->setDriftVScale(0.0, 7.0);
-    calculator->studyResults2("MergedMapsSmoothCosmicAndLaserV1098.root", "AnglePlots/MergedMapsSmoothCosmicAndLaserV1098.png");
-    calculator->Residual_afterTrackCorr("MergedMapsSmoothCosmicAndLaserV1098.root", "ResidualPlots/MergedMapsSmoothCosmicAndLaserV1098.png");
-
- //  calculator->compareMeans();
- //  calculator->Residual_afterTrackCorr("MergedMapsLaserOnlyMC.root", "ResidualPlots/MergedMapsLaserOnlyMC.png");
- //   calculator->Residual_afterTrackCorr("MergedMapsLaserOnly.root", "ResidualPlots/MergedMapsLaserOnly.png");
- //   calculator->Residual_afterTrackCorr("MergedMapsLaserOnlyMC.root", "ResidualPlots/MergedMapsLaserOnlyMC.png");
-  //  calculator->Residual_afterTrackCorr("MergedMapsLaserOnly.root", "ResidualPlots/MergedMapsLaserOnly.png");
-  //  calculator->Residual_afterTrackCorr("MergedMapsLaserOnlyMC.root", "ResidualPlots/MergedMapsLaserOnlyMC.png");
-  //  calculator->compareDataMC("TrackResidualsCombined.root", "TrackResidualsMCCombined.root", "Combined");
-  //  calculator->compareDataMC("TrackResidualsCosmicOnly.root", "TrackResidualsCosmicOnlyMC.root", "CosmicOnly");
-  //  calculator->compareDataMC("TrackResidualsLaserOnly.root", "TrackResidualsLaserOnlyMC.root", "LaserOnly");
-  //  calculator->makeCSVMap("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserV1098.root","MergedMapsSmoothCosmicAndLaserV1098");
+  //  calculator->combineMaps(true, true, false);
+ //   calculator->combineMaps(true, false, false);
+  //  calculator->combineMaps(true, false, true);
+   // calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
+  //  calculator->studyResults2("MergedMapsCosmicOnlySmoothed.root", "AnglePlots/MergedMapsCosmicOnlySmoothed.png");
+  //  calculator->studyResults2("MergedMapsCosmicAndLaserNoDriftV.root", "AnglePlots/MergedMapsCosmicAndLaserNoDriftV.png");
+   // calculator->studyResults2("MergedMapsSmoothCosmicAndLaserV1098NoAvg.root", "AnglePlots/MergedMapsSmoothCosmicAndLaserV1098NoAvg.png");
+   // calculator->studyResults2("MergedMapsLaserOnly.root", "AnglePlots/MergedMapsLaserOnly.png");
+  //  calculator->studyResults2("MergedMapsCosmicOnlySmoothed.root", "AnglePlots/MergedMapsCosmicOnlySmoothed.png");
+  //  calculator->studyResults2("MergedMapsCosmicOnlySmoothed.root", "AnglePlots/Dokus.png");
+  //  calculator->studyResults2("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserNoDriftVVolumeSmoothed.root", "AnglePlots/Dokus.png");
+    calculator->studyResults2("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserV1098VolumeSmoothedMC.root", "AnglePlots/BadMC.png");
+  //  calculator->plotSpaceChargeBoundary("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserNoDriftVVolumeSmoothed.root", "SCESurface.root");
+   // calculator->Residual_afterTrackCorr("MergedMapsSmoothCosmicAndLaserNoDriftVNoAvg.root", "ResidualPlots/MergedMapsSmoothCosmicAndLaserNoDriftVNoAvg.png");
+   // calculator->Residual_afterTrackCorr("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsSmoothCosmicAndLaserNoDriftVVolumeSmoothed.root", "ResidualPlots/Dokus.png");
+  //  calculator->Residual_afterTrackCorr("MergedMapsCosmicAndLaserNoDriftV.root", "ResidualPlots/MergedMapsCosmicAndLaserNoDriftVRes.png");
+   // calculator->Residual_afterTrackCorr("MergedMapsSmoothCosmicAndLaserV1098VolumeSmoothed.root", "ResidualPlots/MergedMapsSmoothCosmicAndLaserV1098VolumeSmoothed.png");
+    
   //  calculator->MakeDistortionHistograms(true);
   //  calculator->MakeDistortionHistograms(false);
   //  calculator->makeFwdMapPlots();
-    /*calculator->setDriftVScale(0, 0);
-    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-    calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0and0Default.png");
-    calculator->setDriftVScale(0,1);
-    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-    calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0and1Default.png");*/
-   // calculator->setDriftVScale(0,2);
-    //calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-    //calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0and2Default.png");
-    /*calculator->setDriftVScale(0, -2);
-    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-    calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0andNeg2Default.png");
-    calculator->setDriftVScale(0, -1);
-    calculator->combineMaps(6, 21, 8, 19, 21, 79, true);
-    calculator->Residual_afterTrackCorr("IterativeLaserMap.root", "ResidualPlots/DriftV0andNeg1Default.png");*/
+  //  calculator->makeSmoothMapPlots();
+  //  calculator->makeSmoothMap("MergedMapsSmoothCosmicAndLaserNoDriftV.root", "EdgesSmoothed.root", false, true);
+    //calculator->makeSmoothMap("EdgesSmoothed.root", "MergedMapsSmoothCosmicAndLaserNoDriftVVolumeSmoothed.root", true, false);
+  //  calculator->makeCSVMap("/uboone/data/users/joelam/SCEDistortionMaps/MergedMapsCosmicOnlySmoothed.root","MergedMapsCosmicOnlySmoothed");
+   
     
     
   if(doVoxIter){

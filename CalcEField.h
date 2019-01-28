@@ -85,7 +85,7 @@ class eFieldCalculator{
 
   public:
      
-    eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = false; driftSign = 1.0; laserDriftVScale = 1.0; cosmicDriftVScale = 1.0;}
+    eFieldCalculator() {gErrorIgnoreLevel = kFatal; useRelErrorCut = false; driftSign = 1.0; laserDriftVScale = 0.0; cosmicDriftVScale = 0.0;}
      
      ~eFieldCalculator(){}
     
@@ -122,6 +122,8 @@ class eFieldCalculator{
      void compareTruth(bool sigmaDiff = false);
     
      void makeFwdMapPlots();
+    
+     void makeSmoothMapPlots();
      
      double calculateFWHM(TH1F *hist);
      
@@ -143,6 +145,8 @@ class eFieldCalculator{
     
     void combineMaps(int lowX = 0, int highX = 300, int lowY = 0, int highY = 300, int lowZ = 21, int highZ = 87, bool isData = true);
     
+    void makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing);
+    
     void  compareFaces(bool isData = false);
     
     void combineWeightedMaps();
@@ -154,6 +158,12 @@ class eFieldCalculator{
     float LinInterp(float x, float x1, float x2, float q00, float q01);
     
     float TrilinInterp(float x, float y, float z, float q000, float q001, float q010, float q011, float q100, float q101, float q110, float q111, float x1, float x2, float y1, float y2, float z1, float z2);
+    
+    float TrilinInterp(TH3 *histo, std::vector<int> centerBin);
+    
+    float SmoothBoundary(TH3 *h_cosmic, TH3 *h_laser, std::vector<int> firstBin, std::vector<int> secondBin, axisType axis);
+    
+    void plotSpaceChargeBoundary(std::string inputMapFileName, std::string meanFileName);
     
     
     void doFits();
