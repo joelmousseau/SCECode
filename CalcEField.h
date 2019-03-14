@@ -116,6 +116,8 @@ class eFieldCalculator{
      std::vector<int> cosmicToVox(std::vector<double> point);
      
      void compareCalib(bool isData = false);
+    
+    void makeUncertaintyMap(int nUniverses, bool useMC, std::string outputMapFileName);
      
      void compareCalibZXPlane(bool isData = false);
      
@@ -145,7 +147,7 @@ class eFieldCalculator{
     
     void combineMaps(int lowX = 0, int highX = 300, int lowY = 0, int highY = 300, int lowZ = 21, int highZ = 87, bool isData = true);
     
-    void makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing);
+    void makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing, int universe = -1);
     
     void  compareFaces(bool isData = false);
     
@@ -179,6 +181,8 @@ class eFieldCalculator{
     bool isInLaserRegion(double x, double y, double z);
     
     void makeCSVMap(std::string inputFileName, std::string outputFileName);
+    
+    void makeEFieldPlots(std::string inputFileName);
     
     double cosmicDriftVScale;
     double laserDriftVScale;
