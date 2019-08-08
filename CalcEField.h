@@ -147,7 +147,7 @@ class eFieldCalculator{
     
     void combineMaps(int lowX = 0, int highX = 300, int lowY = 0, int highY = 300, int lowZ = 21, int highZ = 87, bool isData = true);
     
-    void makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing, int universe = -1);
+    void makeSmoothMap(std::string inputMapFileName, std::string outputMapFileName, bool doTriLinSmoothing, bool doEdgeSmoothing, int nUniverses = 1);
     
     void  compareFaces(bool isData = false);
     
