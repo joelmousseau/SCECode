@@ -63,6 +63,8 @@
 
 double calcChi2(const double *vals);
 
+double getChi2(double valOne, double valTwo, double err);
+
 struct Point {
     float x;
     float y;
@@ -117,7 +119,9 @@ class eFieldCalculator{
      
      void compareCalib(bool isData = false);
     
-    void makeUncertaintyMap(int nUniverses, bool useMC, std::string outputMapFileName);
+    void makeUncertaintyMap(std::string outputMapFileName, int lowX, int highX, int lowY, int highY, int lowZ, int highZ, bool SmoothBoundary = true, int nUniverses = 2);
+    
+    void makeUncertaintyMapPlots(std::string inputCVFileName, std::string inputUncertaintyMapFileName, int nUniverses = 1);
      
      void compareCalibZXPlane(bool isData = false);
      
@@ -155,7 +159,7 @@ class eFieldCalculator{
     
     void MakeDistorionTree();
     
-    void MakeDistortionHistograms(bool isFwd = false);
+    void MakeDistortionHistograms(bool isFwd = false, int universe = -1);
     
     float LinInterp(float x, float x1, float x2, float q00, float q01);
     
